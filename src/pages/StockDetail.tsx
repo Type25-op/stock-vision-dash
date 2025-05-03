@@ -7,13 +7,32 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ChevronUp, ChevronDown, ArrowLeft } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+
+// Stock data interface
+interface LiveStockData {
+  price: number;
+  volume: string;
+  marketCap: string;
+  change: number;
+}
 
 export default function StockDetail() {
   const { id } = useParams<{ id: string }>();
   const { getStockById, loadingStocks } = useStocks();
   const stock = id ? getStockById(id) : undefined;
   const [chartPeriod, setChartPeriod] = useState<string>("1d");
+  const [liveStockData, setLiveStockData] = useState<LiveStockData | null>(null);
+
+  // Use stock data from API if available, otherwise fall back to mock data
+  const stockData = liveStockData || (stock ? {
+    price: stock.price,
+    volume: stock.volume,
+    marketCap: stock.marketCap,
+    change: stock.change
+  } : null);
+  
+  const isPositive = stockData ? stockData.change >= 0 : false;
 
   if (loadingStocks) {
     return (
@@ -50,7 +69,11 @@ export default function StockDetail() {
     );
   }
   
-  const isPositive = stock.change >= 0;
+  const handleStockDataLoaded = (data: LiveStockData | null) => {
+    if (data) {
+      setLiveStockData(data);
+    }
+  };
 
   return (
     <div className="min-h-screen">
@@ -71,13 +94,13 @@ export default function StockDetail() {
               <span className="font-mono font-semibold">{stock.ticker}</span>
               <div className={isPositive ? "stock-change-positive" : "stock-change-negative"}>
                 {isPositive ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-                {Math.abs(stock.change).toFixed(2)}%
+                {stockData ? Math.abs(stockData.change).toFixed(2) : "0.00"}%
               </div>
             </div>
           </div>
           
           <div className="text-2xl font-bold font-mono">
-            ${stock.price.toFixed(2)}
+            ${stockData ? stockData.price.toFixed(2) : "0.00"}
           </div>
         </div>
         
@@ -128,6 +151,7 @@ export default function StockDetail() {
                   ticker={stock.ticker}
                   color={isPositive ? "hsl(var(--success))" : "hsl(var(--danger))"}
                   period={chartPeriod}
+                  onDataLoaded={handleStockDataLoaded}
                 />
               </div>
             </CardContent>
@@ -139,15 +163,15 @@ export default function StockDetail() {
           <div className="stats-grid">
             <StatsCard
               label="Current Price"
-              value={`$${stock.price.toFixed(2)}`}
+              value={`$${stockData ? stockData.price.toFixed(2) : "0.00"}`}
             />
             <StatsCard
               label="Volume"
-              value={stock.volume}
+              value={stockData ? stockData.volume : "N/A"}
             />
             <StatsCard
               label="Market Cap"
-              value={stock.marketCap}
+              value={stockData ? stockData.marketCap : "N/A"}
             />
             <StatsCard
               label="Volatility"

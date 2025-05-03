@@ -15,11 +15,20 @@ interface ChartCardProps {
   color?: string;
   subtitle?: string;
   period?: string;
+  onDataLoaded?: (stockData: StockData | null) => void;
 }
 
 interface YahooFinanceData {
   timestamp: number[];
   close: number[];
+}
+
+// Stock data interface for additional metrics
+interface StockData {
+  price: number;
+  volume: string;
+  marketCap: string;
+  change: number;
 }
 
 export default function ChartCard({
@@ -29,10 +38,12 @@ export default function ChartCard({
   color = "hsl(var(--primary))",
   subtitle,
   period = "1d",
+  onDataLoaded,
 }: ChartCardProps) {
   const [chartData, setChartData] = useState<Array<{ name: string; value: number }> | null>(providedData || null);
   const [loading, setLoading] = useState(!providedData && !!ticker);
   const [error, setError] = useState<string | null>(null);
+  const [stockInfo, setStockInfo] = useState<StockData | null>(null);
 
   useEffect(() => {
     if (providedData) {
@@ -54,6 +65,15 @@ export default function ChartCard({
         console.log(`Generating fallback data for ${ticker} with period ${period}`);
         const fallbackData = generateRealisticStockData(ticker, period);
         setChartData(fallbackData);
+        
+        // Generate additional stock data
+        const additionalData = generateAdditionalStockData(ticker);
+        setStockInfo(additionalData);
+        
+        // Notify parent components about the data
+        if (onDataLoaded) {
+          onDataLoaded(additionalData);
+        }
       } catch (err) {
         console.error('Error generating stock data:', err);
         setError('Failed to load chart data');
@@ -61,13 +81,61 @@ export default function ChartCard({
         setChartData(generateSimpleFallbackData());
         // Show toast to inform user
         toast.error("Unable to load live chart data. Using simulated data instead.");
+        
+        if (onDataLoaded) {
+          onDataLoaded(null);
+        }
       } finally {
         setLoading(false);
       }
     };
     
     fetchYahooFinanceData();
-  }, [ticker, period, providedData]);
+  }, [ticker, period, providedData, onDataLoaded]);
+  
+  // Generate additional stock data (price, volume, marketCap)
+  const generateAdditionalStockData = (ticker: string): StockData => {
+    // Use ticker name to generate a seed for consistent but "random" data
+    const seedValue = ticker.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0);
+    
+    // Base price depends on the ticker (just for simulation)
+    const basePrice = (seedValue % 500) + 50; // Between $50 and $550
+    
+    // Add some randomness to the price
+    const price = parseFloat((basePrice + (Math.sin(seedValue / 10) * 5)).toFixed(2));
+    
+    // Generate volume (based on ticker)
+    const volumeBase = seedValue % 100;
+    let volume: string;
+    if (volumeBase < 30) {
+      volume = `${((volumeBase + 5) / 10).toFixed(1)}M`;
+    } else if (volumeBase < 70) {
+      volume = `${volumeBase + 10}M`;
+    } else {
+      volume = `${(volumeBase / 10 + 5).toFixed(1)}B`;
+    }
+    
+    // Generate market cap (based on price and ticker)
+    const marketCapBase = price * (seedValue / 10);
+    let marketCap: string;
+    if (marketCapBase < 1000) {
+      marketCap = `${(marketCapBase / 10).toFixed(1)}B`;
+    } else if (marketCapBase < 10000) {
+      marketCap = `${(marketCapBase / 1000).toFixed(2)}T`;
+    } else {
+      marketCap = `${(marketCapBase / 1000).toFixed(1)}T`;
+    }
+    
+    // Calculate change percentage (between -5% and +5%)
+    const change = parseFloat((Math.sin(seedValue / 5) * 5).toFixed(2));
+    
+    return {
+      price,
+      volume,
+      marketCap,
+      change
+    };
+  };
   
   // Generate realistic-looking stock data based on ticker and period
   const generateRealisticStockData = (ticker: string, period: string) => {
