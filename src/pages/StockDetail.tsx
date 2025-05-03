@@ -7,29 +7,13 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ChevronUp, ChevronDown, ArrowLeft } from "lucide-react";
-
-// Mock price history data
-const generateMockPriceHistory = () => {
-  const data = [];
-  let price = 150 + Math.random() * 50;
-  
-  for (let i = 0; i < 20; i++) {
-    // Generate random price fluctuations
-    price = price + (Math.random() - 0.5) * 10;
-    data.push({
-      name: `${i + 1}h`,
-      value: parseFloat(price.toFixed(2))
-    });
-  }
-  
-  return data;
-};
+import { useState } from "react";
 
 export default function StockDetail() {
   const { id } = useParams<{ id: string }>();
   const { getStockById, loadingStocks } = useStocks();
   const stock = id ? getStockById(id) : undefined;
-  const priceHistory = generateMockPriceHistory();
+  const [chartPeriod, setChartPeriod] = useState<string>("1d");
 
   if (loadingStocks) {
     return (
@@ -97,14 +81,53 @@ export default function StockDetail() {
           </div>
         </div>
         
-        <div className="mb-10">
+        <div className="mb-4">
+          <div className="flex space-x-2 mb-4">
+            <Button 
+              variant={chartPeriod === "1d" ? "default" : "outline"} 
+              size="sm"
+              onClick={() => setChartPeriod("1d")}
+            >
+              1D
+            </Button>
+            <Button 
+              variant={chartPeriod === "5d" ? "default" : "outline"} 
+              size="sm"
+              onClick={() => setChartPeriod("5d")}
+            >
+              5D
+            </Button>
+            <Button 
+              variant={chartPeriod === "1mo" ? "default" : "outline"} 
+              size="sm"
+              onClick={() => setChartPeriod("1mo")}
+            >
+              1M
+            </Button>
+            <Button 
+              variant={chartPeriod === "6mo" ? "default" : "outline"} 
+              size="sm"
+              onClick={() => setChartPeriod("6mo")}
+            >
+              6M
+            </Button>
+            <Button 
+              variant={chartPeriod === "1y" ? "default" : "outline"} 
+              size="sm"
+              onClick={() => setChartPeriod("1y")}
+            >
+              1Y
+            </Button>
+          </div>
+          
           <Card>
             <CardContent className="p-1 md:p-4">
               <div className="h-[400px] w-full">
                 <ChartCard
                   title=""
-                  data={priceHistory}
+                  ticker={stock.ticker}
                   color={isPositive ? "hsl(var(--success))" : "hsl(var(--danger))"}
+                  period={chartPeriod}
                 />
               </div>
             </CardContent>
