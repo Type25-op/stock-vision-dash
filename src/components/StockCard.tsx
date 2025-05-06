@@ -4,7 +4,15 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Stock } from "@/providers/StockProvider";
 import { ChevronUp, ChevronDown, TrendingUp } from "lucide-react";
 import { useState, useEffect } from "react";
-import { fetchStockPredictions, StockPrediction, getVolatilityLevel } from "@/utils/apiService";
+import { 
+  fetchStockPredictions, 
+  StockPrediction, 
+  getVolatilityLevel,
+  fetchStockQuote,
+  AlphaVantageQuote,
+  formatVolume,
+  getStockFallbackData
+} from "@/utils/apiService";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { toast } from "@/components/ui/sonner";
 
@@ -12,71 +20,62 @@ interface StockCardProps {
   stock: Stock;
 }
 
-// Stock real-time data interface
-interface LiveStockData {
-  price: number;
-  volume: string;
-  change: number;
-}
-
 export default function StockCard({ stock }: StockCardProps) {
-  const [liveData, setLiveData] = useState<LiveStockData | null>(null);
+  const [stockData, setStockData] = useState<AlphaVantageQuote | null>(null);
   const [prediction, setPrediction] = useState<StockPrediction | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const [volatilityLevel, setVolatilityLevel] = useState<"Low" | "Medium" | "High">(stock.volatility as "Low" | "Medium" | "High");
   
   useEffect(() => {
-    // Generate consistent live data for the stock
-    const generateLiveData = () => {
-      const seedValue = stock.ticker.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0);
-      
-      // Base price depends on the ticker (just for simulation)
-      const basePrice = (seedValue % 500) + 50;
-      
-      // Add some randomness to the price
-      const price = parseFloat((basePrice + (Math.sin(seedValue / 10) * 5)).toFixed(2));
-      
-      // Generate volume
-      const volumeBase = seedValue % 100;
-      let volume: string;
-      if (volumeBase < 30) {
-        volume = `${((volumeBase + 5) / 10).toFixed(1)}M`;
-      } else if (volumeBase < 70) {
-        volume = `${volumeBase + 10}M`;
-      } else {
-        volume = `${(volumeBase / 10 + 5).toFixed(1)}B`;
-      }
-      
-      // Calculate change percentage
-      const change = parseFloat((Math.sin(seedValue / 5) * 5).toFixed(2));
-      
-      setLiveData({ price, volume, change });
-    };
-    
-    generateLiveData();
-    
-    // Fetch prediction data for this stock
-    const fetchPredictionData = async () => {
+    const fetchData = async () => {
       setLoading(true);
+      
       try {
-        const data = await fetchStockPredictions(stock.ticker);
-        if (data) {
-          setPrediction(data);
+        // Fetch real-time stock data
+        const quoteData = await fetchStockQuote(stock.ticker);
+        
+        if (quoteData) {
+          setStockData(quoteData);
+        } else {
+          // Use fallback data if API fails
+          console.log(`Using fallback data for ${stock.ticker}`);
+          setStockData(getStockFallbackData(stock.ticker));
+        }
+        
+        // Fetch prediction data
+        const predictionData = await fetchStockPredictions(stock.ticker);
+        if (predictionData) {
+          setPrediction(predictionData);
           // Calculate volatility level based on volatility score
-          setVolatilityLevel(getVolatilityLevel(data.volatility_score));
+          setVolatilityLevel(getVolatilityLevel(predictionData.volatility_score));
         }
       } catch (error) {
-        console.error(`Failed to fetch predictions for ${stock.ticker}:`, error);
+        console.error(`Failed to fetch data for ${stock.ticker}:`, error);
       } finally {
         setLoading(false);
       }
     };
     
-    fetchPredictionData();
+    fetchData();
   }, [stock.ticker]);
   
-  const isPositive = liveData ? liveData.change >= 0 : stock.change >= 0;
+  // Parse change percentage for consistent display
+  const changePercent = stockData ? 
+    parseFloat(stockData.changePercent.replace('%', '')) : 
+    stock.change;
+  
+  const isPositive = changePercent >= 0;
   const isPredictionPositive = prediction ? prediction.percent_change >= 0 : false;
+  
+  // Format the price for display
+  const price = stockData ? 
+    parseFloat(stockData.price).toFixed(2) : 
+    stock.price.toFixed(2);
+  
+  // Format volume for display
+  const volume = stockData ? 
+    formatVolume(stockData.volume) : 
+    stock.volume;
   
   return (
     <Link to={`/stocks/${stock.id}`}>
@@ -89,18 +88,18 @@ export default function StockCard({ stock }: StockCardProps) {
             </div>
             <div className={isPositive ? "stock-change-positive" : "stock-change-negative"}>
               {isPositive ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-              {Math.abs(liveData ? liveData.change : stock.change).toFixed(2)}%
+              {Math.abs(changePercent).toFixed(2)}%
             </div>
           </div>
           
           <div className="mt-4 grid grid-cols-2 gap-2">
             <div>
               <div className="text-xs text-muted-foreground">Volume</div>
-              <div className="font-mono">{liveData ? liveData.volume : stock.volume}</div>
+              <div className="font-mono">{volume}</div>
             </div>
             <div>
-              <div className="text-xs text-muted-foreground">Buy Price</div>
-              <div className="font-mono">${stock.buyPrice.toFixed(2)}</div>
+              <div className="text-xs text-muted-foreground">Price</div>
+              <div className="font-mono">${price}</div>
             </div>
             <div>
               <div className="text-xs text-muted-foreground">Volatility</div>

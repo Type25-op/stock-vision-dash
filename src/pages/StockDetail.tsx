@@ -1,3 +1,4 @@
+
 import { useParams, Link } from "react-router-dom";
 import { useStocks } from "@/providers/StockProvider";
 import Header from "@/components/Header";
@@ -7,40 +8,62 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ChevronUp, ChevronDown, ArrowLeft, TrendingUp } from "lucide-react";
 import { useState, useEffect } from "react";
-import { fetchStockPredictions, StockPrediction, getVolatilityLevel } from "@/utils/apiService";
+import { 
+  fetchStockPredictions, 
+  StockPrediction, 
+  getVolatilityLevel,
+  fetchStockQuote,
+  AlphaVantageQuote,
+  formatVolume,
+  getStockFallbackData
+} from "@/utils/apiService";
 import { toast } from "@/components/ui/sonner";
-
-// Stock data interface
-interface LiveStockData {
-  price: number;
-  volume: string;
-  marketCap: string;
-  change: number;
-}
 
 export default function StockDetail() {
   const { id } = useParams<{ id: string }>();
   const { getStockById, loadingStocks } = useStocks();
   const stock = id ? getStockById(id) : undefined;
   const [chartPeriod, setChartPeriod] = useState<string>("1d");
-  const [liveStockData, setLiveStockData] = useState<LiveStockData | null>(null);
+  const [stockData, setStockData] = useState<AlphaVantageQuote | null>(null);
   const [prediction, setPrediction] = useState<StockPrediction | null>(null);
   const [loadingPrediction, setLoadingPrediction] = useState<boolean>(false);
+  const [loadingStockData, setLoadingStockData] = useState<boolean>(false);
   const [volatilityLevel, setVolatilityLevel] = useState<"Low" | "Medium" | "High">(stock?.volatility as "Low" | "Medium" | "High" || "Medium");
-
-  // Use stock data from API if available, otherwise fall back to mock data
-  const stockData = liveStockData || (stock ? {
-    price: stock.price,
-    volume: stock.volume,
-    marketCap: stock.marketCap,
-    change: stock.change
-  } : null);
   
-  const isPositive = stockData ? stockData.change >= 0 : false;
+  // Calculate change percentage for display
+  const changePercent = stockData ? 
+    parseFloat(stockData.changePercent.replace('%', '')) : 
+    (stock ? stock.change : 0);
+  
+  const isPositive = changePercent >= 0;
   const isPredictionPositive = prediction ? prediction.percent_change >= 0 : false;
 
   useEffect(() => {
     if (stock) {
+      // Fetch real-time stock data
+      const fetchStockData = async () => {
+        setLoadingStockData(true);
+        try {
+          const data = await fetchStockQuote(stock.ticker);
+          
+          if (data) {
+            setStockData(data);
+          } else {
+            // Use fallback data if API fails
+            console.log(`Using fallback data for ${stock.ticker}`);
+            setStockData(getStockFallbackData(stock.ticker));
+          }
+        } catch (error) {
+          console.error(`Failed to fetch stock data for ${stock.ticker}:`, error);
+          toast.error(`Failed to load current stock data for ${stock.ticker}`);
+          // Use fallback data on error
+          setStockData(getStockFallbackData(stock.ticker));
+        } finally {
+          setLoadingStockData(false);
+        }
+      };
+      
+      // Fetch prediction data
       const fetchPredictionData = async () => {
         setLoadingPrediction(true);
         try {
@@ -58,6 +81,7 @@ export default function StockDetail() {
         }
       };
       
+      fetchStockData();
       fetchPredictionData();
     }
   }, [stock]);
@@ -96,12 +120,19 @@ export default function StockDetail() {
       </div>
     );
   }
-  
-  const handleStockDataLoaded = (data: LiveStockData | null) => {
-    if (data) {
-      setLiveStockData(data);
-    }
-  };
+
+  // Format the current price for display
+  const currentPrice = stockData ? 
+    parseFloat(stockData.price).toFixed(2) : 
+    stock.price.toFixed(2);
+    
+  // Format the volume for display
+  const volume = stockData ? 
+    formatVolume(stockData.volume) : 
+    stock.volume;
+    
+  // Get market cap
+  const marketCap = stockData?.marketCap || stock.marketCap;
 
   return (
     <div className="min-h-screen">
@@ -120,15 +151,22 @@ export default function StockDetail() {
             <h1 className="text-3xl font-bold">{stock.name}</h1>
             <div className="flex items-center gap-2">
               <span className="font-mono font-semibold">{stock.ticker}</span>
-              <div className={isPositive ? "stock-change-positive" : "stock-change-negative"}>
-                {isPositive ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-                {stockData ? Math.abs(stockData.change).toFixed(2) : "0.00"}%
-              </div>
+              {!loadingStockData && (
+                <div className={isPositive ? "stock-change-positive" : "stock-change-negative"}>
+                  {isPositive ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                  {Math.abs(changePercent).toFixed(2)}%
+                </div>
+              )}
+              {loadingStockData && <Skeleton className="h-6 w-16" />}
             </div>
           </div>
           
           <div className="text-2xl font-bold font-mono">
-            ${stockData ? stockData.price.toFixed(2) : "0.00"}
+            {!loadingStockData ? (
+              `$${currentPrice}`
+            ) : (
+              <Skeleton className="h-8 w-24" />
+            )}
           </div>
         </div>
         
@@ -179,7 +217,6 @@ export default function StockDetail() {
                   ticker={stock.ticker}
                   color={isPositive ? "hsl(var(--success))" : "hsl(var(--danger))"}
                   period={chartPeriod}
-                  onDataLoaded={handleStockDataLoaded}
                 />
               </div>
             </CardContent>
@@ -262,20 +299,24 @@ export default function StockDetail() {
           <div className="stats-grid">
             <StatsCard
               label="Current Price"
-              value={`$${stockData ? stockData.price.toFixed(2) : "0.00"}`}
+              value={loadingStockData ? "Loading..." : `$${currentPrice}`}
+              loading={loadingStockData}
             />
             <StatsCard
               label="Volume"
-              value={stockData ? stockData.volume : "N/A"}
+              value={loadingStockData ? "Loading..." : volume}
+              loading={loadingStockData}
             />
             <StatsCard
               label="Market Cap"
-              value={stockData ? stockData.marketCap : "N/A"}
+              value={loadingStockData ? "Loading..." : marketCap}
+              loading={loadingStockData}
             />
             <StatsCard
               label="Volatility"
               value={volatilityLevel}
               valueClassName={`volatility-${volatilityLevel.toLowerCase()}`}
+              loading={loadingPrediction}
             />
             {prediction && (
               <StatsCard
@@ -294,17 +335,23 @@ export default function StockDetail() {
 function StatsCard({ 
   label, 
   value,
-  valueClassName = "" 
+  valueClassName = "",
+  loading = false
 }: { 
   label: string; 
   value: string;
   valueClassName?: string;
+  loading?: boolean;
 }) {
   return (
     <Card>
       <CardContent className="p-4">
         <div className="text-sm text-muted-foreground mb-1">{label}</div>
-        <div className={`text-lg font-semibold ${valueClassName}`}>{value}</div>
+        {loading ? (
+          <Skeleton className="h-6 w-24" />
+        ) : (
+          <div className={`text-lg font-semibold ${valueClassName}`}>{value}</div>
+        )}
       </CardContent>
     </Card>
   );

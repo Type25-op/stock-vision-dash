@@ -1,4 +1,3 @@
-
 // API service for fetching stock predictions and market volatility data
 
 export interface StockPrediction {
@@ -32,6 +31,23 @@ export interface MarketVolatility {
   neutral_stocks: number;
   total_stocks_analyzed: number;
 }
+
+// Alpha Vantage API types
+export interface AlphaVantageQuote {
+  symbol: string;
+  open: string;
+  high: string;
+  low: string;
+  price: string;
+  volume: string;
+  previousClose: string;
+  change: string;
+  changePercent: string;
+  marketCap?: string;
+}
+
+// Alpha Vantage API key
+const ALPHA_VANTAGE_API_KEY = 'AOLSJAPIQOALFSKT6QLOYGNLKL8468QA'; // This is a demo key with limited usage
 
 // Mock data for when API is unavailable
 const getMockStockPrediction = (stockCode: string): StockPrediction => {
@@ -139,3 +155,136 @@ export const getVolatilityLevel = (score: number): "Low" | "Medium" | "High" => 
   return "High";
 };
 
+// Fetch real-time stock data from Alpha Vantage API
+export const fetchStockQuote = async (symbol: string): Promise<AlphaVantageQuote | null> => {
+  try {
+    // Construct Alpha Vantage API URL for global quote
+    const url = `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${symbol}&apikey=${ALPHA_VANTAGE_API_KEY}`;
+    
+    console.log(`Fetching stock data for ${symbol} from Alpha Vantage...`);
+    const response = await fetch(url);
+    
+    if (!response.ok) {
+      throw new Error(`Alpha Vantage API error: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    
+    // Check if we received the expected data structure
+    if (!data || !data['Global Quote']) {
+      console.warn(`Invalid data structure from Alpha Vantage for ${symbol}:`, data);
+      throw new Error('Invalid data structure from Alpha Vantage');
+    }
+    
+    const quote = data['Global Quote'];
+    
+    // Extract and format the data
+    const formattedQuote: AlphaVantageQuote = {
+      symbol: quote['01. symbol'] || symbol,
+      open: quote['02. open'] || '0',
+      high: quote['03. high'] || '0',
+      low: quote['04. low'] || '0',
+      price: quote['05. price'] || '0',
+      volume: quote['06. volume'] || '0',
+      previousClose: quote['08. previous close'] || '0',
+      change: quote['09. change'] || '0',
+      changePercent: quote['10. change percent'] || '0%',
+    };
+    
+    // Get the market cap using a second API call
+    try {
+      const overviewUrl = `https://www.alphavantage.co/query?function=OVERVIEW&symbol=${symbol}&apikey=${ALPHA_VANTAGE_API_KEY}`;
+      const overviewResponse = await fetch(overviewUrl);
+      
+      if (overviewResponse.ok) {
+        const overviewData = await overviewResponse.json();
+        if (overviewData && overviewData.MarketCapitalization) {
+          const marketCap = parseInt(overviewData.MarketCapitalization);
+          formattedQuote.marketCap = formatMarketCap(marketCap);
+        }
+      }
+    } catch (error) {
+      console.warn(`Failed to fetch market cap for ${symbol}:`, error);
+    }
+    
+    console.log(`Alpha Vantage data for ${symbol}:`, formattedQuote);
+    return formattedQuote;
+  } catch (error) {
+    console.error(`Error fetching stock quote for ${symbol}:`, error);
+    return null;
+  }
+};
+
+// Format large numbers into human-readable format (e.g., 1.2T, 456.7B, 789.1M)
+export const formatMarketCap = (value: number): string => {
+  if (value >= 1e12) {
+    return `${(value / 1e12).toFixed(2)}T`;
+  } else if (value >= 1e9) {
+    return `${(value / 1e9).toFixed(1)}B`;
+  } else if (value >= 1e6) {
+    return `${(value / 1e6).toFixed(1)}M`;
+  } else {
+    return value.toString();
+  }
+};
+
+// Format volume to human-readable format
+export const formatVolume = (volume: string | number): string => {
+  const numVolume = typeof volume === 'string' ? parseInt(volume) : volume;
+  
+  if (numVolume >= 1e9) {
+    return `${(numVolume / 1e9).toFixed(1)}B`;
+  } else if (numVolume >= 1e6) {
+    return `${(numVolume / 1e6).toFixed(1)}M`;
+  } else if (numVolume >= 1e3) {
+    return `${(numVolume / 1e3).toFixed(1)}K`;
+  } else {
+    return numVolume.toString();
+  }
+};
+
+// Generate fallback data for when API is unavailable
+export const getStockFallbackData = (stockCode: string): AlphaVantageQuote => {
+  const seedValue = stockCode.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0);
+  const isPositive = seedValue % 2 === 0;
+  
+  // Base price depends on the ticker (just for simulation)
+  const basePrice = (seedValue % 500) + 50;
+  
+  // Add some randomness to the price
+  const price = parseFloat((basePrice + (Math.sin(seedValue / 10) * 5)).toFixed(2));
+  
+  // Calculate previous close
+  const prevClose = price - (isPositive ? -2 : 2) - (Math.random() * 5);
+  
+  // Calculate change
+  const change = price - prevClose;
+  const changePercent = ((change / prevClose) * 100).toFixed(2) + '%';
+  
+  // Generate volume
+  const volumeBase = seedValue % 100;
+  let volume: string;
+  if (volumeBase < 30) {
+    volume = `${(volumeBase + 5) * 100000}`;
+  } else if (volumeBase < 70) {
+    volume = `${(volumeBase + 10) * 1000000}`;
+  } else {
+    volume = `${(volumeBase / 10 + 5) * 10000000}`;
+  }
+  
+  // Generate market cap
+  const marketCap = price * parseInt(volume) * 10;
+  
+  return {
+    symbol: stockCode,
+    open: prevClose.toFixed(2),
+    high: (price * 1.01).toFixed(2),
+    low: (price * 0.98).toFixed(2),
+    price: price.toString(),
+    volume: volume,
+    previousClose: prevClose.toFixed(2),
+    change: change.toFixed(2),
+    changePercent: changePercent,
+    marketCap: formatMarketCap(marketCap)
+  };
+};
