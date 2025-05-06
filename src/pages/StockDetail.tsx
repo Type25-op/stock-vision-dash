@@ -6,8 +6,9 @@ import ChartCard from "@/components/ChartCard";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ChevronUp, ChevronDown, ArrowLeft } from "lucide-react";
+import { ChevronUp, ChevronDown, ArrowLeft, TrendingUp } from "lucide-react";
 import { useState, useEffect } from "react";
+import { fetchStockPredictions, StockPrediction } from "@/utils/apiService";
 
 // Stock data interface
 interface LiveStockData {
@@ -23,6 +24,8 @@ export default function StockDetail() {
   const stock = id ? getStockById(id) : undefined;
   const [chartPeriod, setChartPeriod] = useState<string>("1d");
   const [liveStockData, setLiveStockData] = useState<LiveStockData | null>(null);
+  const [prediction, setPrediction] = useState<StockPrediction | null>(null);
+  const [loadingPrediction, setLoadingPrediction] = useState<boolean>(false);
 
   // Use stock data from API if available, otherwise fall back to mock data
   const stockData = liveStockData || (stock ? {
@@ -33,6 +36,27 @@ export default function StockDetail() {
   } : null);
   
   const isPositive = stockData ? stockData.change >= 0 : false;
+  const isPredictionPositive = prediction ? prediction.percent_change >= 0 : false;
+
+  useEffect(() => {
+    if (stock) {
+      const fetchPredictionData = async () => {
+        setLoadingPrediction(true);
+        try {
+          const data = await fetchStockPredictions(stock.ticker);
+          if (data) {
+            setPrediction(data);
+          }
+        } catch (error) {
+          console.error(`Failed to fetch predictions for ${stock.ticker}:`, error);
+        } finally {
+          setLoadingPrediction(false);
+        }
+      };
+      
+      fetchPredictionData();
+    }
+  }, [stock]);
 
   if (loadingStocks) {
     return (
@@ -158,6 +182,77 @@ export default function StockDetail() {
           </Card>
         </div>
         
+        {/* Predictions Section */}
+        {prediction && (
+          <div className="mb-6">
+            <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
+              <TrendingUp className="h-5 w-5" />
+              AI Predictions
+              <span className="text-sm font-normal text-muted-foreground">
+                (Model: {prediction.model_version})
+              </span>
+            </h2>
+            
+            <Card>
+              <CardContent className="p-4">
+                <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
+                  <div className="md:col-span-2">
+                    <div className="text-sm text-muted-foreground mb-1">5-Day Prediction</div>
+                    <div className={`text-lg font-bold ${isPredictionPositive ? "text-success" : "text-danger"}`}>
+                      {isPredictionPositive ? "+" : ""}{prediction.percent_change.toFixed(2)}%
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      Forecast as of {prediction.date}
+                    </div>
+                  </div>
+                  
+                  <div>
+                    <div className="text-sm text-muted-foreground mb-1">1 Day</div>
+                    <div className="font-mono">${prediction.pred_1d.toFixed(2)}</div>
+                  </div>
+                  
+                  <div>
+                    <div className="text-sm text-muted-foreground mb-1">2 Days</div>
+                    <div className="font-mono">${prediction.pred_2d.toFixed(2)}</div>
+                  </div>
+                  
+                  <div>
+                    <div className="text-sm text-muted-foreground mb-1">3 Days</div>
+                    <div className="font-mono">${prediction.pred_3d.toFixed(2)}</div>
+                  </div>
+                  
+                  <div>
+                    <div className="text-sm text-muted-foreground mb-1">5 Days</div>
+                    <div className="font-mono">${prediction.pred_5d.toFixed(2)}</div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
+        {loadingPrediction && (
+          <div className="mb-6">
+            <h2 className="text-xl font-semibold mb-4">AI Predictions</h2>
+            <Card>
+              <CardContent className="p-4">
+                <div className="animate-pulse">
+                  <Skeleton className="h-5 w-32 mb-2" />
+                  <Skeleton className="h-8 w-20 mb-4" />
+                  <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                    {Array(5).fill(0).map((_, i) => (
+                      <div key={i}>
+                        <Skeleton className="h-4 w-16 mb-2" />
+                        <Skeleton className="h-6 w-24" />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+        
         <div>
           <h2 className="text-xl font-semibold mb-4">Stats</h2>
           <div className="stats-grid">
@@ -178,6 +273,13 @@ export default function StockDetail() {
               value={stock.volatility}
               valueClassName={`volatility-${stock.volatility.toLowerCase()}`}
             />
+            {prediction && (
+              <StatsCard
+                label="Volatility Score"
+                value={prediction.volatility_score.toString()}
+                valueClassName={prediction.volatility_score > 0 ? "text-success" : prediction.volatility_score < 0 ? "text-danger" : ""}
+              />
+            )}
           </div>
         </div>
       </main>

@@ -2,8 +2,11 @@
 import { Link } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card";
 import { Stock } from "@/providers/StockProvider";
-import { ChevronUp, ChevronDown } from "lucide-react";
+import { ChevronUp, ChevronDown, TrendingUp } from "lucide-react";
 import { useState, useEffect } from "react";
+import { fetchStockPredictions, StockPrediction } from "@/utils/apiService";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { toast } from "@/components/ui/sonner";
 
 interface StockCardProps {
   stock: Stock;
@@ -18,6 +21,8 @@ interface LiveStockData {
 
 export default function StockCard({ stock }: StockCardProps) {
   const [liveData, setLiveData] = useState<LiveStockData | null>(null);
+  const [prediction, setPrediction] = useState<StockPrediction | null>(null);
+  const [loading, setLoading] = useState<boolean>(false);
   
   useEffect(() => {
     // Generate consistent live data for the stock
@@ -48,9 +53,27 @@ export default function StockCard({ stock }: StockCardProps) {
     };
     
     generateLiveData();
+    
+    // Fetch prediction data for this stock
+    const fetchPredictionData = async () => {
+      setLoading(true);
+      try {
+        const data = await fetchStockPredictions(stock.ticker);
+        if (data) {
+          setPrediction(data);
+        }
+      } catch (error) {
+        console.error(`Failed to fetch predictions for ${stock.ticker}:`, error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    fetchPredictionData();
   }, [stock.ticker]);
   
   const isPositive = liveData ? liveData.change >= 0 : stock.change >= 0;
+  const isPredictionPositive = prediction ? prediction.percent_change >= 0 : false;
   
   return (
     <Link to={`/stocks/${stock.id}`}>
@@ -76,13 +99,37 @@ export default function StockCard({ stock }: StockCardProps) {
               <div className="text-xs text-muted-foreground">Buy Price</div>
               <div className="font-mono">${stock.buyPrice.toFixed(2)}</div>
             </div>
-            <div className="col-span-2">
+            <div>
               <div className="text-xs text-muted-foreground">Volatility</div>
               <div>
                 <span className={`volatility-${stock.volatility.toLowerCase()}`}>
                   {stock.volatility}
                 </span>
               </div>
+            </div>
+            <div>
+              <div className="flex items-center gap-1">
+                <div className="text-xs text-muted-foreground">Prediction</div>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger>
+                      <TrendingUp className="h-3 w-3 text-muted-foreground" />
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>5-Day AI Prediction</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </div>
+              {prediction ? (
+                <div className={isPredictionPositive ? "text-success text-sm font-medium" : "text-danger text-sm font-medium"}>
+                  {isPredictionPositive ? "+" : ""}{prediction.percent_change.toFixed(2)}%
+                </div>
+              ) : loading ? (
+                <div className="text-sm text-muted-foreground">Loading...</div>
+              ) : (
+                <div className="text-sm text-muted-foreground">N/A</div>
+              )}
             </div>
           </div>
         </CardContent>
