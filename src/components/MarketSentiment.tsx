@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { fetchMarketVolatility, MarketVolatility } from "@/utils/apiService";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AlertTriangle } from "lucide-react";
+import { toast } from "@/components/ui/sonner";
 
 interface MarketSentimentProps {
   initialValue?: number;
@@ -30,43 +31,42 @@ export default function MarketSentiment({
       
       try {
         const data = await fetchMarketVolatility();
-        if (data) {
-          setMarketData(data);
-          
-          // Convert market sentiment to a value between 0-100
-          // Bearish: 0-30, Slightly Bearish: 30-45, Neutral: 45-55, Slightly Bullish: 55-70, Bullish: 70-100
-          let sentimentValue: number;
-          switch (data.market_sentiment) {
-            case "Bearish":
-              sentimentValue = 15 + (data.market_volatility_score * 3);
-              break;
-            case "Slightly Bearish":
-              sentimentValue = 37.5 + (data.market_volatility_score * 2);
-              break;
-            case "Neutral":
-              sentimentValue = 50 + (data.market_volatility_score * 1);
-              break;
-            case "Slightly Bullish":
-              sentimentValue = 62.5 + (data.market_volatility_score * 2);
-              break;
-            case "Bullish":
-              sentimentValue = 85 + (data.market_volatility_score * 3);
-              break;
-            default:
-              sentimentValue = 50; // Default to neutral
-          }
-          
-          // Ensure the value is within 0-100 range
-          sentimentValue = Math.max(0, Math.min(100, sentimentValue));
-          
-          setValue(sentimentValue);
-          if (onUpdate) {
-            onUpdate(sentimentValue);
-          }
+        setMarketData(data);
+        
+        // Convert market sentiment to a value between 0-100
+        // Bearish: 0-30, Slightly Bearish: 30-45, Neutral: 45-55, Slightly Bullish: 55-70, Bullish: 70-100
+        let sentimentValue: number;
+        switch (data.market_sentiment) {
+          case "Bearish":
+            sentimentValue = 15 + (data.market_volatility_score * 3);
+            break;
+          case "Slightly Bearish":
+            sentimentValue = 37.5 + (data.market_volatility_score * 2);
+            break;
+          case "Neutral":
+            sentimentValue = 50 + (data.market_volatility_score * 1);
+            break;
+          case "Slightly Bullish":
+            sentimentValue = 62.5 + (data.market_volatility_score * 2);
+            break;
+          case "Bullish":
+            sentimentValue = 85 + (data.market_volatility_score * 3);
+            break;
+          default:
+            sentimentValue = 50; // Default to neutral
+        }
+        
+        // Ensure the value is within 0-100 range
+        sentimentValue = Math.max(0, Math.min(100, sentimentValue));
+        
+        setValue(sentimentValue);
+        if (onUpdate) {
+          onUpdate(sentimentValue);
         }
       } catch (err) {
         console.error("Error loading market data:", err);
         setError("Failed to load market data");
+        toast.error("Failed to load market data. Using simulated data.");
       } finally {
         setLoading(false);
       }
@@ -116,22 +116,6 @@ export default function MarketSentiment({
               <Skeleton className="h-5 w-24" />
             </div>
             <Skeleton className="h-2 w-full" />
-          </div>
-        </CardContent>
-      </Card>
-    );
-  }
-  
-  if (error) {
-    return (
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-md">Market Sentiment</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex flex-col items-center justify-center py-2">
-            <AlertTriangle className="h-8 w-8 text-orange-400 mb-2" />
-            <p className="text-sm text-muted-foreground">Failed to load market data</p>
           </div>
         </CardContent>
       </Card>

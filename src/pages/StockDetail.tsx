@@ -1,4 +1,3 @@
-
 import { useParams, Link } from "react-router-dom";
 import { useStocks } from "@/providers/StockProvider";
 import Header from "@/components/Header";
@@ -8,7 +7,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ChevronUp, ChevronDown, ArrowLeft, TrendingUp } from "lucide-react";
 import { useState, useEffect } from "react";
-import { fetchStockPredictions, StockPrediction } from "@/utils/apiService";
+import { fetchStockPredictions, StockPrediction, getVolatilityLevel } from "@/utils/apiService";
+import { toast } from "@/components/ui/sonner";
 
 // Stock data interface
 interface LiveStockData {
@@ -26,6 +26,7 @@ export default function StockDetail() {
   const [liveStockData, setLiveStockData] = useState<LiveStockData | null>(null);
   const [prediction, setPrediction] = useState<StockPrediction | null>(null);
   const [loadingPrediction, setLoadingPrediction] = useState<boolean>(false);
+  const [volatilityLevel, setVolatilityLevel] = useState<"Low" | "Medium" | "High">(stock?.volatility as "Low" | "Medium" | "High" || "Medium");
 
   // Use stock data from API if available, otherwise fall back to mock data
   const stockData = liveStockData || (stock ? {
@@ -44,11 +45,14 @@ export default function StockDetail() {
         setLoadingPrediction(true);
         try {
           const data = await fetchStockPredictions(stock.ticker);
-          if (data) {
-            setPrediction(data);
-          }
+          setPrediction(data);
+          
+          // Set volatility level based on the volatility score
+          setVolatilityLevel(getVolatilityLevel(data.volatility_score));
+          
         } catch (error) {
           console.error(`Failed to fetch predictions for ${stock.ticker}:`, error);
+          toast.error(`Failed to load predictions for ${stock.ticker}`);
         } finally {
           setLoadingPrediction(false);
         }
@@ -270,8 +274,8 @@ export default function StockDetail() {
             />
             <StatsCard
               label="Volatility"
-              value={stock.volatility}
-              valueClassName={`volatility-${stock.volatility.toLowerCase()}`}
+              value={volatilityLevel}
+              valueClassName={`volatility-${volatilityLevel.toLowerCase()}`}
             />
             {prediction && (
               <StatsCard

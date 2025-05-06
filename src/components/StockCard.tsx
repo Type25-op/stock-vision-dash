@@ -4,7 +4,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Stock } from "@/providers/StockProvider";
 import { ChevronUp, ChevronDown, TrendingUp } from "lucide-react";
 import { useState, useEffect } from "react";
-import { fetchStockPredictions, StockPrediction } from "@/utils/apiService";
+import { fetchStockPredictions, StockPrediction, getVolatilityLevel } from "@/utils/apiService";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { toast } from "@/components/ui/sonner";
 
@@ -23,6 +23,7 @@ export default function StockCard({ stock }: StockCardProps) {
   const [liveData, setLiveData] = useState<LiveStockData | null>(null);
   const [prediction, setPrediction] = useState<StockPrediction | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
+  const [volatilityLevel, setVolatilityLevel] = useState<"Low" | "Medium" | "High">(stock.volatility as "Low" | "Medium" | "High");
   
   useEffect(() => {
     // Generate consistent live data for the stock
@@ -61,6 +62,8 @@ export default function StockCard({ stock }: StockCardProps) {
         const data = await fetchStockPredictions(stock.ticker);
         if (data) {
           setPrediction(data);
+          // Calculate volatility level based on volatility score
+          setVolatilityLevel(getVolatilityLevel(data.volatility_score));
         }
       } catch (error) {
         console.error(`Failed to fetch predictions for ${stock.ticker}:`, error);
@@ -102,8 +105,8 @@ export default function StockCard({ stock }: StockCardProps) {
             <div>
               <div className="text-xs text-muted-foreground">Volatility</div>
               <div>
-                <span className={`volatility-${stock.volatility.toLowerCase()}`}>
-                  {stock.volatility}
+                <span className={`volatility-${volatilityLevel.toLowerCase()}`}>
+                  {volatilityLevel}
                 </span>
               </div>
             </div>
