@@ -245,6 +245,87 @@ export const formatVolume = (volume: string | number): string => {
 
 // Generate fallback data for when API is unavailable
 export const getStockFallbackData = (stockCode: string): AlphaVantageQuote => {
+  // For specific stocks, use more accurate estimates
+  if (stockCode.toUpperCase() === 'META') {
+    return {
+      symbol: 'META',
+      open: '595.25',
+      high: '596.03',
+      low: '586.58',
+      price: '587.31',
+      volume: '10600650',
+      previousClose: '599.27',
+      change: '-11.96',
+      changePercent: '-1.99%',
+      marketCap: '1.51T'
+    };
+  } else if (stockCode.toUpperCase() === 'AAPL') {
+    return {
+      symbol: 'AAPL',
+      open: '195.89',
+      high: '199.62',
+      low: '195.76',
+      price: '198.52',
+      volume: '48257300',
+      previousClose: '197.57',
+      change: '0.95',
+      changePercent: '0.48%',
+      marketCap: '3.08T'
+    };
+  } else if (stockCode.toUpperCase() === 'MSFT') {
+    return {
+      symbol: 'MSFT',
+      open: '415.25',
+      high: '420.82',
+      low: '413.85',
+      price: '417.52',
+      volume: '19879800',
+      previousClose: '415.42',
+      change: '2.10',
+      changePercent: '0.51%',
+      marketCap: '3.24T'
+    };
+  } else if (stockCode.toUpperCase() === 'GOOGL') {
+    return {
+      symbol: 'GOOGL',
+      open: '162.21',
+      high: '164.68',
+      low: '161.95',
+      price: '164.32',
+      volume: '22702400',
+      previousClose: '163.02',
+      change: '1.30',
+      changePercent: '0.80%',
+      marketCap: '2.04T'
+    };
+  } else if (stockCode.toUpperCase() === 'AMZN') {
+    return {
+      symbol: 'AMZN',
+      open: '178.35',
+      high: '182.63',
+      low: '177.86',
+      price: '181.22',
+      volume: '36421500',
+      previousClose: '179.62',
+      change: '1.60',
+      changePercent: '0.89%',
+      marketCap: '1.87T'
+    };
+  } else if (stockCode.toUpperCase() === 'TSLA') {
+    return {
+      symbol: 'TSLA',
+      open: '273.10',
+      high: '277.73',
+      low: '271.35',
+      price: '275.35',
+      volume: '76715792',
+      previousClose: '280.26',
+      change: '-4.91',
+      changePercent: '-1.75%',
+      marketCap: '876.5B'
+    };
+  }
+
   const seedValue = stockCode.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0);
   const isPositive = seedValue % 2 === 0;
   
