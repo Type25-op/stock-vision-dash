@@ -1,4 +1,3 @@
-
 import { useEffect, useState, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from "recharts";
@@ -22,6 +21,7 @@ interface ChartCardProps {
   data?: Array<{
     name: string;
     value: number;
+    relativeValue?: number;
   }>;
   color?: string;
   subtitle?: string;
@@ -142,7 +142,17 @@ export default function ChartCard({
       console.error('Error generating stock data:', err);
       setError('Failed to load chart data');
       // Use simple fallback data
-      setChartData(generateSimpleFallbackData());
+      const simpleData = generateSimpleFallbackData();
+      
+      // Ensure relativeValue exists if showRelativeChange is true
+      if (showRelativeChange && simpleData.length > 0) {
+        const baseValue = simpleData[0].value;
+        simpleData.forEach(dataPoint => {
+          dataPoint.relativeValue = ((dataPoint.value / baseValue) - 1) * 100;
+        });
+      }
+      
+      setChartData(simpleData);
       // Show toast to inform user
       toast.error("Unable to load chart data. Using simulated data instead.");
       
@@ -156,7 +166,19 @@ export default function ChartCard({
 
   useEffect(() => {
     if (providedData) {
-      setChartData(providedData);
+      // Ensure providedData has relativeValue property if showRelativeChange is true
+      if (showRelativeChange && providedData.length > 0) {
+        const processedData = [...providedData];
+        const baseValue = processedData[0].value;
+        processedData.forEach(dataPoint => {
+          if (dataPoint.relativeValue === undefined) {
+            dataPoint.relativeValue = ((dataPoint.value / baseValue) - 1) * 100;
+          }
+        });
+        setChartData(processedData);
+      } else {
+        setChartData(providedData);
+      }
       return;
     }
     
@@ -179,7 +201,7 @@ export default function ChartCard({
       
       return () => clearInterval(interval);
     }
-  }, [ticker, selectedPeriod, providedData, onDataLoaded, fetchChartData, cacheKey]);
+  }, [ticker, selectedPeriod, providedData, onDataLoaded, fetchChartData, cacheKey, showRelativeChange]);
   
   // Handle period change
   const handlePeriodChange = (newPeriod: ChartPeriod) => {
@@ -248,7 +270,7 @@ export default function ChartCard({
   
   // Generate realistic-looking stock data based on ticker and period
   const generateRealisticStockData = (ticker: string, period: string) => {
-    const data: Array<{ name: string; value: number }> = [];
+    const data: Array<{ name: string; value: number; relativeValue?: number }> = [];
     
     // Use ticker name to generate a seed for consistent but "random" data
     const seedValue = ticker.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0);
@@ -368,7 +390,7 @@ export default function ChartCard({
   
   // Simple fallback for worst-case scenarios
   const generateSimpleFallbackData = () => {
-    const data = [];
+    const data: Array<{ name: string; value: number; relativeValue?: number }> = [];
     let value = 150 + Math.random() * 50;
     
     for (let i = 0; i < 20; i++) {
@@ -376,6 +398,14 @@ export default function ChartCard({
       data.push({
         name: `${i + 1}h`,
         value: parseFloat(value.toFixed(2))
+      });
+    }
+    
+    // Add relativeValue field if we're using relative change
+    if (showRelativeChange && data.length > 0) {
+      const baseValue = data[0].value;
+      data.forEach(point => {
+        point.relativeValue = ((point.value / baseValue) - 1) * 100;
       });
     }
     
@@ -441,10 +471,21 @@ export default function ChartCard({
 
   // Get the data key to use
   const yDataKey = showRelativeChange ? 'relativeValue' : 'value';
-  const chartMaxValue = showRelativeChange 
+  
+  // Make sure every point in chartData has the relativeValue property if showRelativeChange is true
+  if (showRelativeChange && chartData && chartData.length > 0) {
+    const baseValue = chartData[0].value;
+    chartData.forEach(point => {
+      if (point.relativeValue === undefined) {
+        point.relativeValue = ((point.value / baseValue) - 1) * 100;
+      }
+    });
+  }
+  
+  const chartMaxValue = showRelativeChange && chartData
     ? Math.max(...chartData.map(item => item.relativeValue || 0)) * 1.1
     : undefined;
-  const chartMinValue = showRelativeChange 
+  const chartMinValue = showRelativeChange && chartData
     ? Math.min(...chartData.map(item => item.relativeValue || 0)) * 1.1
     : undefined;
 
@@ -533,7 +574,7 @@ export default function ChartCard({
         <div className={`h-[${height}px] w-full`} style={{ height: `${height}px` }}>
           <ResponsiveContainer width="100%" height="100%">
             <LineChart
-              data={chartData}
+              data={chartData || []}
               margin={{
                 top: 5,
                 right: 10,
