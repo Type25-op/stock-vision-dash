@@ -11,31 +11,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { fetchMarketVolatility, MarketVolatility } from "@/utils/apiService";
 import { ArrowUpIcon, ArrowDownIcon } from "lucide-react";
 
-// Mock chart data
-const niftyData = [
-  { name: "10 AM", value: 18500 },
-  { name: "11 AM", value: 18520 },
-  { name: "12 PM", value: 18580 },
-  { name: "1 PM", value: 18530 },
-  { name: "2 PM", value: 18550 },
-  { name: "3 PM", value: 18600 },
-];
-
-const volatilityData = [
-  { name: "Mon", value: 15 },
-  { name: "Tue", value: 18 },
-  { name: "Wed", value: 12 },
-  { name: "Thu", value: 25 },
-  { name: "Fri", value: 20 },
-];
-
-const marketOverviewData = [
-  { name: "Week 1", value: 1000 },
-  { name: "Week 2", value: 1100 },
-  { name: "Week 3", value: 1050 },
-  { name: "Week 4", value: 1150 },
-];
-
 export default function Dashboard() {
   const { stocks, loadingStocks } = useStocks();
   const [activeTab, setActiveTab] = useState("watchlist");
@@ -164,11 +139,13 @@ export default function Dashboard() {
                 <Card className="mb-6">
                   <CardContent className="p-6">
                     <div className="h-[400px]">
-                      <ResponsiveChartCard
+                      <ChartCard
                         title="Nifty 50 Day Graph"
-                        data={niftyData}
+                        ticker="NIFTY50"
                         color="hsl(var(--primary))"
-                        subtitle="May 06, 2025"
+                        subtitle="May 09, 2025"
+                        period="1d"
+                        cacheKey="nifty50_chart"
                       />
                     </div>
                   </CardContent>
@@ -216,49 +193,24 @@ export default function Dashboard() {
             
             <ChartCard
               title="Stock Volatility"
-              data={volatilityData}
+              ticker="VOL-INDEX"
               color="hsl(var(--danger))"
               subtitle="Last 5 days"
+              period="5d"
+              cacheKey="volatility_chart"
             />
             
             <ChartCard
               title="Market Overview"
-              data={marketOverviewData}
+              ticker="MARKET-IDX"
               color="hsl(var(--success))"
               subtitle="Past month"
+              period="1mo"
+              cacheKey="market_overview_chart"
             />
           </div>
         </div>
       </main>
     </div>
-  );
-}
-
-// Responsive chart with increased height for better visualization
-function ResponsiveChartCard({
-  title,
-  data,
-  color = "hsl(var(--primary))",
-  subtitle,
-}: {
-  title: string;
-  data: Array<{
-    name: string;
-    value: number;
-  }>;
-  color?: string;
-  subtitle?: string;
-}) {
-  return (
-    <>
-      <div className="flex justify-between items-center mb-4">
-        <h2 className="font-semibold">{title}</h2>
-        {subtitle && <span className="text-sm text-muted-foreground">{subtitle}</span>}
-      </div>
-
-      <div className="h-full w-full">
-        <ChartCard title="" data={data} color={color} />
-      </div>
-    </>
   );
 }

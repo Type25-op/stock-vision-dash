@@ -2,7 +2,7 @@
 import { Link } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card";
 import { Stock } from "@/providers/StockProvider";
-import { ChevronUp, ChevronDown, TrendingUp, Database } from "lucide-react";
+import { ChevronUp, ChevronDown, TrendingUp, Database, RefreshCw } from "lucide-react";
 import { useState, useEffect } from "react";
 import { 
   fetchStockPredictions, 
@@ -14,8 +14,16 @@ import {
   getStockFallbackData
 } from "@/utils/apiService";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/sonner";
-import { getFromCache } from "@/utils/cacheUtils";
+import { 
+  getFromCache, 
+  clearCache, 
+  canRefresh, 
+  markRefreshed, 
+  getRemainingCooldown,
+  formatCooldown 
+} from "@/utils/cacheUtils";
 
 interface StockCardProps {
   stock: Stock;
@@ -27,57 +35,123 @@ export default function StockCard({ stock }: StockCardProps) {
   const [loading, setLoading] = useState<boolean>(false);
   const [volatilityLevel, setVolatilityLevel] = useState<"Low" | "Medium" | "High">(stock.volatility as "Low" | "Medium" | "High");
   const [usingCachedData, setUsingCachedData] = useState<boolean>(false);
+  const [canRefreshData, setCanRefreshData] = useState<boolean>(true);
+  const [refreshing, setRefreshing] = useState<boolean>(false);
+  const [cooldownTime, setCooldownTime] = useState<string>("");
+  
+  // Define cache keys
+  const quoteKey = `quote_${stock.ticker.toUpperCase()}`;
+  const predictionKey = `predictions_${stock.ticker.toUpperCase()}`;
+  
+  const handleRefresh = async () => {
+    // Check if we can refresh
+    if (!canRefresh(quoteKey) || !canRefresh(predictionKey)) {
+      const quoteRemaining = getRemainingCooldown(quoteKey);
+      const predictionRemaining = getRemainingCooldown(predictionKey);
+      const remaining = Math.max(quoteRemaining, predictionRemaining);
+      
+      toast.error(`Please wait ${formatCooldown(remaining)} before refreshing again`);
+      return;
+    }
+    
+    setRefreshing(true);
+    
+    try {
+      // Clear cache for this stock
+      clearCache(quoteKey);
+      clearCache(predictionKey);
+      
+      // Mark as refreshed to start cooldown
+      markRefreshed(quoteKey);
+      markRefreshed(predictionKey);
+      
+      // Set refresh cooldown
+      setCanRefreshData(false);
+      
+      // Fetch fresh data
+      await fetchData(true);
+      
+      toast.success(`${stock.ticker} data refreshed successfully`);
+    } catch (error) {
+      console.error(`Error refreshing ${stock.ticker} data:`, error);
+      toast.error(`Failed to refresh ${stock.ticker} data`);
+    } finally {
+      setRefreshing(false);
+    }
+  };
+  
+  const fetchData = async (isRefresh = false) => {
+    setLoading(true);
+    
+    try {
+      // Check if data exists in cache
+      const quoteInCache = !!getFromCache(quoteKey);
+      const predictionInCache = !!getFromCache(predictionKey);
+      setUsingCachedData((quoteInCache || predictionInCache) && !isRefresh);
+      
+      // Fetch real-time stock data
+      console.log(`Fetching quote data for ${stock.ticker}...`);
+      const quoteData = await fetchStockQuote(stock.ticker);
+      
+      if (quoteData) {
+        console.log(`Successfully fetched data for ${stock.ticker}:`, quoteData);
+        setStockData(quoteData);
+      } else {
+        // Use fallback data if API fails
+        console.log(`Using fallback data for ${stock.ticker}`);
+        const fallbackData = getStockFallbackData(stock.ticker);
+        
+        // For META specifically, ensure it shows correct price (approximately $587)
+        if (stock.ticker === 'META') {
+          fallbackData.price = '587.31';
+          fallbackData.changePercent = '-1.99%';
+          fallbackData.volume = '10600650';
+          fallbackData.marketCap = '1.5T';
+        }
+        
+        setStockData(fallbackData);
+      }
+      
+      // Fetch prediction data
+      console.log(`Fetching prediction data for ${stock.ticker}...`);
+      const predictionData = await fetchStockPredictions(stock.ticker);
+      if (predictionData) {
+        console.log(`Successfully fetched predictions for ${stock.ticker}:`, predictionData);
+        setPrediction(predictionData);
+        // Calculate volatility level based on volatility score
+        setVolatilityLevel(getVolatilityLevel(predictionData.volatility_score));
+      }
+    } catch (error) {
+      console.error(`Failed to fetch data for ${stock.ticker}:`, error);
+    } finally {
+      setLoading(false);
+    }
+  };
   
   useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
+    fetchData();
+    
+    // Set up cooldown checks
+    const checkCooldown = () => {
+      const canRefreshQuote = canRefresh(quoteKey);
+      const canRefreshPrediction = canRefresh(predictionKey);
       
-      try {
-        // Check if data exists in cache
-        const quoteInCache = !!getFromCache(`quote_${stock.ticker.toUpperCase()}`);
-        const predictionInCache = !!getFromCache(`predictions_${stock.ticker.toUpperCase()}`);
-        setUsingCachedData(quoteInCache || predictionInCache);
-        
-        // Fetch real-time stock data
-        console.log(`Fetching quote data for ${stock.ticker}...`);
-        const quoteData = await fetchStockQuote(stock.ticker);
-        
-        if (quoteData) {
-          console.log(`Successfully fetched data for ${stock.ticker}:`, quoteData);
-          setStockData(quoteData);
-        } else {
-          // Use fallback data if API fails
-          console.log(`Using fallback data for ${stock.ticker}`);
-          const fallbackData = getStockFallbackData(stock.ticker);
-          
-          // For META specifically, ensure it shows correct price (approximately $587)
-          if (stock.ticker === 'META') {
-            fallbackData.price = '587.31';
-            fallbackData.changePercent = '-1.99%';
-            fallbackData.volume = '10600650';
-            fallbackData.marketCap = '1.5T';
-          }
-          
-          setStockData(fallbackData);
-        }
-        
-        // Fetch prediction data
-        console.log(`Fetching prediction data for ${stock.ticker}...`);
-        const predictionData = await fetchStockPredictions(stock.ticker);
-        if (predictionData) {
-          console.log(`Successfully fetched predictions for ${stock.ticker}:`, predictionData);
-          setPrediction(predictionData);
-          // Calculate volatility level based on volatility score
-          setVolatilityLevel(getVolatilityLevel(predictionData.volatility_score));
-        }
-      } catch (error) {
-        console.error(`Failed to fetch data for ${stock.ticker}:`, error);
-      } finally {
-        setLoading(false);
+      setCanRefreshData(canRefreshQuote && canRefreshPrediction);
+      
+      if (!canRefreshQuote || !canRefreshPrediction) {
+        const quoteRemaining = getRemainingCooldown(quoteKey);
+        const predictionRemaining = getRemainingCooldown(predictionKey);
+        const remaining = Math.max(quoteRemaining, predictionRemaining);
+        setCooldownTime(formatCooldown(remaining));
+      } else {
+        setCooldownTime("");
       }
     };
     
-    fetchData();
+    checkCooldown();
+    const interval = setInterval(checkCooldown, 1000);
+    
+    return () => clearInterval(interval);
   }, [stock.ticker]);
   
   // Parse change percentage for consistent display
@@ -111,11 +185,25 @@ export default function StockCard({ stock }: StockCardProps) {
               {usingCachedData && (
                 <TooltipProvider>
                   <Tooltip>
-                    <TooltipTrigger>
-                      <Database className="h-3 w-3 text-muted-foreground" />
+                    <TooltipTrigger asChild>
+                      <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        className="h-6 w-6" 
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          handleRefresh();
+                        }}
+                        disabled={!canRefreshData || refreshing}
+                      >
+                        <Database className={`h-3 w-3 ${!canRefreshData ? "text-muted-foreground" : ""}`} />
+                      </Button>
                     </TooltipTrigger>
                     <TooltipContent>
-                      <p>Using cached data (30m)</p>
+                      {canRefreshData 
+                        ? "Using cached data (click to refresh)" 
+                        : `Wait ${cooldownTime} to refresh`}
                     </TooltipContent>
                   </Tooltip>
                 </TooltipProvider>

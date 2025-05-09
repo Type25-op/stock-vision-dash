@@ -1,4 +1,3 @@
-
 import { useParams, Link } from "react-router-dom";
 import { useStocks } from "@/providers/StockProvider";
 import Header from "@/components/Header";
@@ -6,7 +5,7 @@ import ChartCard from "@/components/ChartCard";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ChevronUp, ChevronDown, ArrowLeft, TrendingUp } from "lucide-react";
+import { ChevronUp, ChevronDown, ArrowLeft, TrendingUp, Database, RefreshCw } from "lucide-react";
 import { useState, useEffect } from "react";
 import { 
   fetchStockPredictions, 
@@ -17,7 +16,16 @@ import {
   formatVolume,
   getStockFallbackData
 } from "@/utils/apiService";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { toast } from "@/components/ui/sonner";
+import { 
+  getFromCache, 
+  clearCache, 
+  canRefresh, 
+  markRefreshed, 
+  getRemainingCooldown,
+  formatCooldown 
+} from "@/utils/cacheUtils";
 
 export default function StockDetail() {
   const { id } = useParams<{ id: string }>();
@@ -29,6 +37,15 @@ export default function StockDetail() {
   const [loadingPrediction, setLoadingPrediction] = useState<boolean>(false);
   const [loadingStockData, setLoadingStockData] = useState<boolean>(false);
   const [volatilityLevel, setVolatilityLevel] = useState<"Low" | "Medium" | "High">(stock?.volatility as "Low" | "Medium" | "High" || "Medium");
+  const [usingCachedData, setUsingCachedData] = useState<boolean>(false);
+  const [canRefreshData, setCanRefreshData] = useState<boolean>(true);
+  const [refreshing, setRefreshing] = useState<boolean>(false);
+  const [cooldownTime, setCooldownTime] = useState<string>("");
+  
+  // Define cache keys based on stock ticker
+  const quoteKey = stock ? `quote_${stock.ticker.toUpperCase()}` : '';
+  const predictionKey = stock ? `predictions_${stock.ticker.toUpperCase()}` : '';
+  const chartKey = stock ? `chart_${stock.ticker.toUpperCase()}_${chartPeriod}` : '';
   
   // Calculate change percentage for display
   const changePercent = stockData ? 
@@ -38,53 +55,126 @@ export default function StockDetail() {
   const isPositive = changePercent >= 0;
   const isPredictionPositive = prediction ? prediction.percent_change >= 0 : false;
 
+  const handleRefresh = async () => {
+    if (!stock) return;
+    
+    // Check if we can refresh
+    if (!canRefresh(quoteKey) || !canRefresh(predictionKey)) {
+      const quoteRemaining = getRemainingCooldown(quoteKey);
+      const predictionRemaining = getRemainingCooldown(predictionKey);
+      const remaining = Math.max(quoteRemaining, predictionRemaining);
+      
+      toast.error(`Please wait ${formatCooldown(remaining)} before refreshing again`);
+      return;
+    }
+    
+    setRefreshing(true);
+    
+    try {
+      // Clear cache
+      clearCache(quoteKey);
+      clearCache(predictionKey);
+      clearCache(chartKey);
+      
+      // Mark as refreshed
+      markRefreshed(quoteKey);
+      markRefreshed(predictionKey);
+      markRefreshed(chartKey);
+      
+      // Set refresh cooldown
+      setCanRefreshData(false);
+      
+      // Fetch fresh data
+      await fetchStockData(true);
+      await fetchPredictionData(true);
+      
+      toast.success(`${stock.ticker} data refreshed successfully`);
+    } catch (error) {
+      console.error(`Error refreshing ${stock.ticker} data:`, error);
+      toast.error(`Failed to refresh ${stock.ticker} data`);
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   useEffect(() => {
     if (stock) {
       // Fetch real-time stock data
-      const fetchStockData = async () => {
-        setLoadingStockData(true);
-        try {
-          const data = await fetchStockQuote(stock.ticker);
-          
-          if (data) {
-            setStockData(data);
-          } else {
-            // Use fallback data if API fails
-            console.log(`Using fallback data for ${stock.ticker}`);
-            setStockData(getStockFallbackData(stock.ticker));
-          }
-        } catch (error) {
-          console.error(`Failed to fetch stock data for ${stock.ticker}:`, error);
-          toast.error(`Failed to load current stock data for ${stock.ticker}`);
-          // Use fallback data on error
-          setStockData(getStockFallbackData(stock.ticker));
-        } finally {
-          setLoadingStockData(false);
-        }
-      };
-      
-      // Fetch prediction data
-      const fetchPredictionData = async () => {
-        setLoadingPrediction(true);
-        try {
-          const data = await fetchStockPredictions(stock.ticker);
-          setPrediction(data);
-          
-          // Set volatility level based on the volatility score
-          setVolatilityLevel(getVolatilityLevel(data.volatility_score));
-          
-        } catch (error) {
-          console.error(`Failed to fetch predictions for ${stock.ticker}:`, error);
-          toast.error(`Failed to load predictions for ${stock.ticker}`);
-        } finally {
-          setLoadingPrediction(false);
-        }
-      };
-      
       fetchStockData();
       fetchPredictionData();
+      
+      // Set up cooldown checks
+      const checkCooldown = () => {
+        const canRefreshQuote = canRefresh(quoteKey);
+        const canRefreshPrediction = canRefresh(predictionKey);
+        
+        setCanRefreshData(canRefreshQuote && canRefreshPrediction);
+        
+        if (!canRefreshQuote || !canRefreshPrediction) {
+          const quoteRemaining = getRemainingCooldown(quoteKey);
+          const predictionRemaining = getRemainingCooldown(predictionKey);
+          const remaining = Math.max(quoteRemaining, predictionRemaining);
+          setCooldownTime(formatCooldown(remaining));
+        } else {
+          setCooldownTime("");
+        }
+      };
+      
+      checkCooldown();
+      const interval = setInterval(checkCooldown, 1000);
+      
+      return () => clearInterval(interval);
     }
-  }, [stock]);
+  }, [stock, quoteKey, predictionKey]);
+  
+  const fetchStockData = async (isRefresh = false) => {
+    if (!stock) return;
+    
+    setLoadingStockData(true);
+    try {
+      // Check if data exists in cache
+      if (!isRefresh) {
+        const quoteInCache = !!getFromCache(quoteKey);
+        setUsingCachedData(quoteInCache);
+      }
+      
+      const data = await fetchStockQuote(stock.ticker);
+      
+      if (data) {
+        setStockData(data);
+      } else {
+        // Use fallback data if API fails
+        console.log(`Using fallback data for ${stock.ticker}`);
+        setStockData(getStockFallbackData(stock.ticker));
+      }
+    } catch (error) {
+      console.error(`Failed to fetch stock data for ${stock.ticker}:`, error);
+      toast.error(`Failed to load current stock data for ${stock.ticker}`);
+      // Use fallback data on error
+      setStockData(getStockFallbackData(stock.ticker));
+    } finally {
+      setLoadingStockData(false);
+    }
+  };
+  
+  const fetchPredictionData = async (isRefresh = false) => {
+    if (!stock) return;
+    
+    setLoadingPrediction(true);
+    try {
+      const data = await fetchStockPredictions(stock.ticker);
+      setPrediction(data);
+      
+      // Set volatility level based on the volatility score
+      setVolatilityLevel(getVolatilityLevel(data.volatility_score));
+      
+    } catch (error) {
+      console.error(`Failed to fetch predictions for ${stock.ticker}:`, error);
+      toast.error(`Failed to load predictions for ${stock.ticker}`);
+    } finally {
+      setLoadingPrediction(false);
+    }
+  };
 
   if (loadingStocks) {
     return (
@@ -158,6 +248,31 @@ export default function StockDetail() {
                 </div>
               )}
               {loadingStockData && <Skeleton className="h-6 w-16" />}
+              
+              {usingCachedData && (
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        className="flex items-center gap-1 h-7 px-2"
+                        onClick={handleRefresh}
+                        disabled={!canRefreshData || refreshing}
+                      >
+                        <Database className="h-3 w-3" />
+                        <RefreshCw className={`h-3 w-3 ${refreshing ? "animate-spin" : ""}`} />
+                        {cooldownTime && <span className="text-xs">{cooldownTime}</span>}
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      {canRefreshData 
+                        ? "Using cached data (click to refresh)" 
+                        : `Wait ${cooldownTime} to refresh`}
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              )}
             </div>
           </div>
           
@@ -217,6 +332,7 @@ export default function StockDetail() {
                   ticker={stock.ticker}
                   color={isPositive ? "hsl(var(--success))" : "hsl(var(--danger))"}
                   period={chartPeriod}
+                  cacheKey={chartKey}
                 />
               </div>
             </CardContent>
