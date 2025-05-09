@@ -1,12 +1,13 @@
-
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Label } from "@/components/ui/label";
 import { fetchMarketVolatility, MarketVolatility } from "@/utils/apiService";
 import { Skeleton } from "@/components/ui/skeleton";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, Database } from "lucide-react";
 import { toast } from "@/components/ui/sonner";
+import { getFromCache } from "@/utils/cacheUtils";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface MarketSentimentProps {
   initialValue?: number;
@@ -23,6 +24,7 @@ export default function MarketSentiment({
   const [marketData, setMarketData] = useState<MarketVolatility | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [usingCachedData, setUsingCachedData] = useState(false);
   
   useEffect(() => {
     const loadMarketData = async () => {
@@ -30,6 +32,9 @@ export default function MarketSentiment({
       setError(null);
       
       try {
+        // Check if data exists in cache before fetching
+        setUsingCachedData(!!getFromCache('market_volatility'));
+        
         const data = await fetchMarketVolatility();
         setMarketData(data);
         
@@ -107,7 +112,21 @@ export default function MarketSentiment({
     return (
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-md">Market Sentiment</CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-md">Market Sentiment</CardTitle>
+            {usingCachedData && (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger>
+                    <Database className="h-4 w-4 text-muted-foreground" />
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Using cached data (30m)</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
+          </div>
         </CardHeader>
         <CardContent>
           <div className="flex flex-col gap-3">
@@ -125,7 +144,21 @@ export default function MarketSentiment({
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-md">Market Sentiment</CardTitle>
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-md">Market Sentiment</CardTitle>
+          {usingCachedData && (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger>
+                  <Database className="h-4 w-4 text-muted-foreground" />
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Using cached data (30m)</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
+        </div>
       </CardHeader>
       <CardContent>
         <div className="flex flex-col gap-2">

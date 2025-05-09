@@ -2,7 +2,7 @@
 import { Link } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card";
 import { Stock } from "@/providers/StockProvider";
-import { ChevronUp, ChevronDown, TrendingUp } from "lucide-react";
+import { ChevronUp, ChevronDown, TrendingUp, Database } from "lucide-react";
 import { useState, useEffect } from "react";
 import { 
   fetchStockPredictions, 
@@ -15,6 +15,7 @@ import {
 } from "@/utils/apiService";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { toast } from "@/components/ui/sonner";
+import { getFromCache } from "@/utils/cacheUtils";
 
 interface StockCardProps {
   stock: Stock;
@@ -25,12 +26,18 @@ export default function StockCard({ stock }: StockCardProps) {
   const [prediction, setPrediction] = useState<StockPrediction | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const [volatilityLevel, setVolatilityLevel] = useState<"Low" | "Medium" | "High">(stock.volatility as "Low" | "Medium" | "High");
+  const [usingCachedData, setUsingCachedData] = useState<boolean>(false);
   
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
       
       try {
+        // Check if data exists in cache
+        const quoteInCache = !!getFromCache(`quote_${stock.ticker.toUpperCase()}`);
+        const predictionInCache = !!getFromCache(`predictions_${stock.ticker.toUpperCase()}`);
+        setUsingCachedData(quoteInCache || predictionInCache);
+        
         // Fetch real-time stock data
         console.log(`Fetching quote data for ${stock.ticker}...`);
         const quoteData = await fetchStockQuote(stock.ticker);
@@ -100,9 +107,23 @@ export default function StockCard({ stock }: StockCardProps) {
               <div className="font-mono font-bold text-lg">{stock.ticker}</div>
               <div className="text-sm text-muted-foreground">{stock.name}</div>
             </div>
-            <div className={isPositive ? "stock-change-positive" : "stock-change-negative"}>
-              {isPositive ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-              {Math.abs(changePercent).toFixed(2)}%
+            <div className="flex items-center gap-1">
+              {usingCachedData && (
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger>
+                      <Database className="h-3 w-3 text-muted-foreground" />
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>Using cached data (30m)</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              )}
+              <div className={isPositive ? "stock-change-positive" : "stock-change-negative"}>
+                {isPositive ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                {Math.abs(changePercent).toFixed(2)}%
+              </div>
             </div>
           </div>
           

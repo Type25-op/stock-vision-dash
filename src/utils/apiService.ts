@@ -1,4 +1,5 @@
 // API service for fetching stock predictions and market volatility data
+import { getFromCache, saveToCache } from './cacheUtils';
 
 export interface StockPrediction {
   date: string;
@@ -94,6 +95,16 @@ const mockMarketVolatility: MarketVolatility = {
 // Fetch stock predictions from the API
 export const fetchStockPredictions = async (stockCode: string): Promise<StockPrediction> => {
   try {
+    // Check cache first
+    const cacheKey = `predictions_${stockCode.toUpperCase()}`;
+    const cachedData = getFromCache(cacheKey);
+    
+    if (cachedData) {
+      console.log(`Using cached prediction data for ${stockCode}`);
+      return cachedData;
+    }
+    
+    console.log(`Cache miss for ${stockCode} predictions, fetching from API...`);
     const response = await fetch(`https://govind2121.pythonanywhere.com/get_predictions?stock=${stockCode}`, {
       // Add some query parameters to prevent caching
       cache: 'no-cache',
@@ -109,6 +120,10 @@ export const fetchStockPredictions = async (stockCode: string): Promise<StockPre
     
     const data: StockPrediction = await response.json();
     console.log(`Predictions for ${stockCode}:`, data);
+    
+    // Save to cache
+    saveToCache(cacheKey, data);
+    
     return data;
   } catch (error) {
     console.error("Error fetching stock predictions:", error);
@@ -122,6 +137,16 @@ export const fetchStockPredictions = async (stockCode: string): Promise<StockPre
 // Fetch market volatility data from the API
 export const fetchMarketVolatility = async (): Promise<MarketVolatility> => {
   try {
+    // Check cache first
+    const cacheKey = 'market_volatility';
+    const cachedData = getFromCache(cacheKey);
+    
+    if (cachedData) {
+      console.log('Using cached market volatility data');
+      return cachedData;
+    }
+    
+    console.log('Cache miss for market volatility, fetching from API...');
     // Since the API endpoint is provided as "/market_volatility", we'll assume it's on the same server
     const response = await fetch('https://govind2121.pythonanywhere.com/market_volatility', {
       // Add some query parameters to prevent caching
@@ -138,6 +163,10 @@ export const fetchMarketVolatility = async (): Promise<MarketVolatility> => {
     
     const data: MarketVolatility = await response.json();
     console.log("Market volatility data:", data);
+    
+    // Save to cache
+    saveToCache(cacheKey, data);
+    
     return data;
   } catch (error) {
     console.error("Error fetching market volatility:", error);
@@ -158,6 +187,16 @@ export const getVolatilityLevel = (score: number): "Low" | "Medium" | "High" => 
 // Fetch real-time stock data from Alpha Vantage API
 export const fetchStockQuote = async (symbol: string): Promise<AlphaVantageQuote | null> => {
   try {
+    // Check cache first
+    const cacheKey = `quote_${symbol.toUpperCase()}`;
+    const cachedData = getFromCache(cacheKey);
+    
+    if (cachedData) {
+      console.log(`Using cached quote data for ${symbol}`);
+      return cachedData;
+    }
+    
+    console.log(`Cache miss for ${symbol} quote, fetching from API...`);
     // Construct Alpha Vantage API URL for global quote
     const url = `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${symbol}&apikey=${ALPHA_VANTAGE_API_KEY}`;
     
@@ -193,21 +232,42 @@ export const fetchStockQuote = async (symbol: string): Promise<AlphaVantageQuote
     
     // Get the market cap using a second API call
     try {
-      const overviewUrl = `https://www.alphavantage.co/query?function=OVERVIEW&symbol=${symbol}&apikey=${ALPHA_VANTAGE_API_KEY}`;
-      const overviewResponse = await fetch(overviewUrl);
+      // Check cache for company overview data
+      const overviewCacheKey = `overview_${symbol.toUpperCase()}`;
+      const cachedOverview = getFromCache(overviewCacheKey);
       
-      if (overviewResponse.ok) {
-        const overviewData = await overviewResponse.json();
-        if (overviewData && overviewData.MarketCapitalization) {
-          const marketCap = parseInt(overviewData.MarketCapitalization);
-          formattedQuote.marketCap = formatMarketCap(marketCap);
+      let marketCap = null;
+      
+      if (cachedOverview) {
+        console.log(`Using cached overview data for ${symbol}`);
+        marketCap = cachedOverview.MarketCapitalization;
+      } else {
+        console.log(`Cache miss for ${symbol} overview, fetching from API...`);
+        const overviewUrl = `https://www.alphavantage.co/query?function=OVERVIEW&symbol=${symbol}&apikey=${ALPHA_VANTAGE_API_KEY}`;
+        const overviewResponse = await fetch(overviewUrl);
+        
+        if (overviewResponse.ok) {
+          const overviewData = await overviewResponse.json();
+          if (overviewData && overviewData.MarketCapitalization) {
+            marketCap = overviewData.MarketCapitalization;
+            // Save overview data to cache
+            saveToCache(overviewCacheKey, overviewData);
+          }
         }
+      }
+      
+      if (marketCap) {
+        formattedQuote.marketCap = formatMarketCap(parseInt(marketCap));
       }
     } catch (error) {
       console.warn(`Failed to fetch market cap for ${symbol}:`, error);
     }
     
     console.log(`Alpha Vantage data for ${symbol}:`, formattedQuote);
+    
+    // Save to cache
+    saveToCache(cacheKey, formattedQuote);
+    
     return formattedQuote;
   } catch (error) {
     console.error(`Error fetching stock quote for ${symbol}:`, error);
