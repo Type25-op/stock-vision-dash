@@ -137,8 +137,8 @@ export default function Dashboard() {
               
               <TabsContent value="nifty">
                 <Card className="mb-6">
-                  <CardContent className="p-4">
-                    <div className="h-[380px]">
+                  <CardContent className="p-0 overflow-hidden">
+                    <div className="max-h-[380px] h-auto">
                       <ChartCard
                         title="Nifty 50 Graph"
                         ticker="NIFTY50"
@@ -148,6 +148,7 @@ export default function Dashboard() {
                         cacheKey="nifty50_chart"
                         height={360}
                         showRelativeChange={false}
+                        hideOverflow={true}
                       />
                     </div>
                   </CardContent>
@@ -193,7 +194,7 @@ export default function Dashboard() {
               </Card>
             )}
             
-            <div className="h-[140px]">
+            <div className="h-auto">
               <ChartCard
                 title="Stock Volatility"
                 ticker="VOL-INDEX"
@@ -201,13 +202,14 @@ export default function Dashboard() {
                 subtitle="Last 5 days"
                 period="5d"
                 cacheKey="volatility_chart"
-                height={120}
+                height={100}
                 showRelativeChange={true}
                 compact={true}
+                minimalStyle={true}
               />
             </div>
             
-            <div className="h-[140px]">
+            <div className="h-auto">
               <ChartCard
                 title="Market Overview"
                 ticker="MARKET-IDX"
@@ -215,9 +217,10 @@ export default function Dashboard() {
                 subtitle="Past month"
                 period="1mo"
                 cacheKey="market_overview_chart"
-                height={120}
+                height={100}
                 showRelativeChange={true}
                 compact={true}
+                minimalStyle={true}
               />
             </div>
           </div>

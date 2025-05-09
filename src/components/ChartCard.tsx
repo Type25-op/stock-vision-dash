@@ -1,3 +1,4 @@
+
 import { useEffect, useState, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from "recharts";
@@ -31,6 +32,8 @@ interface ChartCardProps {
   height?: number;
   showRelativeChange?: boolean;
   compact?: boolean;
+  minimalStyle?: boolean;
+  hideOverflow?: boolean;
 }
 
 interface YahooFinanceData {
@@ -61,6 +64,8 @@ export default function ChartCard({
   height = 180,
   showRelativeChange = true,
   compact = false,
+  minimalStyle = false,
+  hideOverflow = false,
 }: ChartCardProps) {
   const { theme } = useTheme();
   const [chartData, setChartData] = useState<Array<{ name: string; value: number; relativeValue?: number }> | null>(providedData || null);
@@ -76,7 +81,7 @@ export default function ChartCard({
   const isDarkMode = theme === 'dark';
   const chartColor = color;
   const areaFill = `${color}33`; // 20% opacity
-  const textColor = isDarkMode ? "rgba(255, 255, 255, 0.7)" : "rgba(0, 0, 0, 0.7)";
+  const textColor = isDarkMode ? "rgba(255, 255, 255, 0.8)" : "rgba(0, 0, 0, 0.8)";
   const gridColor = isDarkMode ? "rgba(255, 255, 255, 0.1)" : "rgba(0, 0, 0, 0.1)";
   const tooltipBgColor = isDarkMode ? "#1A1F2C" : "#FFFFFF";
   const tooltipBorderColor = isDarkMode ? "#333" : "#ccc";
@@ -418,25 +423,25 @@ export default function ChartCard({
 
   if (loading) {
     return (
-      <Card className={`w-full h-full ${compact ? "overflow-hidden" : ""}`}>
-        <CardHeader className="pb-2">
+      <Card className={`w-full h-full ${hideOverflow ? "overflow-hidden" : ""}`}>
+        <CardHeader className={`${compact || minimalStyle ? "pb-1 pt-3 px-3" : "pb-2"}`}>
           <div className="flex items-baseline justify-between">
-            <CardTitle className="text-md">{title}</CardTitle>
-            {subtitle && <span className="text-sm text-muted-foreground">{subtitle}</span>}
+            <CardTitle className={`${compact || minimalStyle ? "text-sm" : "text-md"}`}>{title}</CardTitle>
+            {subtitle && <span className={`${compact || minimalStyle ? "text-xs" : "text-sm"} text-muted-foreground`}>{subtitle}</span>}
           </div>
         </CardHeader>
-        <CardContent className="p-0">
+        <CardContent className={`${compact || minimalStyle ? "p-0" : "p-1"}`}>
           <div className={`w-full flex items-center justify-center`} style={{ height: `${height}px` }}>
-            <Skeleton className={`h-[${height - 30}px] w-[95%]`} style={{ height: `${height - 30}px` }} />
+            <Skeleton className="w-[95%]" style={{ height: `${height - 30}px` }} />
           </div>
         </CardContent>
       </Card>
     );
   }
 
-  if (error) {
+  if (error && !minimalStyle) {
     return (
-      <Card className={`w-full h-full ${compact ? "overflow-hidden" : ""}`}>
+      <Card className={`w-full h-full ${hideOverflow ? "overflow-hidden" : ""}`}>
         <CardHeader className="pb-2">
           <div className="flex items-baseline justify-between">
             <CardTitle className="text-md">{title}</CardTitle>
@@ -493,8 +498,104 @@ export default function ChartCard({
     ? Math.min(...chartData.map(item => item.relativeValue || 0)) * 1.1
     : undefined;
 
+  // For minimal style (similar to reference images)
+  if (minimalStyle) {
+    return (
+      <Card className="w-full h-full bg-black/10 dark:bg-white/5 border-0 shadow-none overflow-hidden">
+        <CardContent className="p-0">
+          <div className="flex flex-col h-full">
+            <div className="flex justify-between items-baseline p-3 pb-0">
+              <div>
+                <div className="font-medium text-sm">{title}</div>
+                <div className="text-xs text-muted-foreground">{subtitle}</div>
+              </div>
+              <div className="flex items-center gap-1">
+                {usingCache && (
+                  <TooltipProvider>
+                    <UITooltip>
+                      <TooltipTrigger>
+                        <Database className="h-3 w-3 text-muted-foreground" />
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>Using cached data (30m)</p>
+                      </TooltipContent>
+                    </UITooltip>
+                  </TooltipProvider>
+                )}
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  onClick={() => fetchChartData(true)} 
+                  disabled={!canRefreshData || loading}
+                  className="h-6 w-6"
+                >
+                  <RefreshCw className="h-3 w-3" />
+                </Button>
+              </div>
+            </div>
+            
+            <div className="mt-1 px-3">
+              <span className={`font-mono text-sm ${isPositive ? "text-success" : "text-danger"}`}>
+                {isPositive ? "+" : ""}{changePercent.toFixed(2)}%
+              </span>
+            </div>
+            
+            <div className="flex-1 p-0">
+              <ResponsiveContainer width="100%" height={height}>
+                <LineChart
+                  data={chartData || []}
+                  margin={{ top: 5, right: 0, left: 0, bottom: 5 }}
+                >
+                  <defs>
+                    <linearGradient id={`colorGradient-${title.replace(/\s+/g, '')}`} x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor={finalChartColor} stopOpacity={0.3}/>
+                      <stop offset="95%" stopColor={finalChartColor} stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
+                  
+                  {showRelativeChange && (
+                    <ReferenceLine 
+                      y={0} 
+                      stroke={textColor} 
+                      strokeWidth={0.5} 
+                      strokeDasharray="3 3" 
+                      opacity={0.3}
+                    />
+                  )}
+                  
+                  <Line
+                    type="monotone"
+                    dataKey={yDataKey}
+                    stroke={finalChartColor}
+                    strokeWidth={1.5}
+                    dot={false}
+                    activeDot={{ r: 3, stroke: tooltipBgColor, strokeWidth: 1 }}
+                    isAnimationActive={true}
+                    animationDuration={1000}
+                  />
+                  
+                  {chartData && chartData.length > 0 && showRelativeChange && (
+                    <YAxis 
+                      domain={['dataMin', 'dataMax']}
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fontSize: 10, fill: textColor }}
+                      tickCount={3}
+                      tickFormatter={(value) => `${Math.round(value)}%`}
+                      width={30}
+                    />
+                  )}
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
   return (
-    <Card className={`w-full h-full ${compact ? "overflow-hidden" : ""}`}>
+    <Card className={`w-full h-full ${hideOverflow ? "overflow-hidden" : ""}`}>
       <CardHeader className={`${compact ? "pb-1 pt-3 px-3" : "pb-1"}`}>
         <div className="flex items-center justify-between">
           <div>
