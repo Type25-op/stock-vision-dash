@@ -137,8 +137,8 @@ export default function Dashboard() {
               
               <TabsContent value="nifty">
                 <Card className="mb-6">
-                  <CardContent className="p-6">
-                    <div className="h-[400px]">
+                  <CardContent className="p-4">
+                    <div className="h-[380px]">
                       <ChartCard
                         title="Nifty 50 Graph"
                         ticker="NIFTY50"
@@ -146,7 +146,7 @@ export default function Dashboard() {
                         subtitle="May 09, 2025"
                         period="1d"
                         cacheKey="nifty50_chart"
-                        height={380}
+                        height={360}
                         showRelativeChange={false}
                       />
                     </div>
@@ -193,27 +193,33 @@ export default function Dashboard() {
               </Card>
             )}
             
-            <ChartCard
-              title="Stock Volatility"
-              ticker="VOL-INDEX"
-              color="hsl(var(--danger))"
-              subtitle="Last 5 days"
-              period="5d"
-              cacheKey="volatility_chart"
-              height={180}
-              showRelativeChange={true}
-            />
+            <div className="h-[140px]">
+              <ChartCard
+                title="Stock Volatility"
+                ticker="VOL-INDEX"
+                color="hsl(var(--danger))"
+                subtitle="Last 5 days"
+                period="5d"
+                cacheKey="volatility_chart"
+                height={120}
+                showRelativeChange={true}
+                compact={true}
+              />
+            </div>
             
-            <ChartCard
-              title="Market Overview"
-              ticker="MARKET-IDX"
-              color="hsl(var(--success))"
-              subtitle="Past month"
-              period="1mo"
-              cacheKey="market_overview_chart"
-              height={180}
-              showRelativeChange={true}
-            />
+            <div className="h-[140px]">
+              <ChartCard
+                title="Market Overview"
+                ticker="MARKET-IDX"
+                color="hsl(var(--success))"
+                subtitle="Past month"
+                period="1mo"
+                cacheKey="market_overview_chart"
+                height={120}
+                showRelativeChange={true}
+                compact={true}
+              />
+            </div>
           </div>
         </div>
       </main>

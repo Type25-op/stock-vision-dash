@@ -30,6 +30,7 @@ interface ChartCardProps {
   cacheKey?: string;
   height?: number;
   showRelativeChange?: boolean;
+  compact?: boolean;
 }
 
 interface YahooFinanceData {
@@ -59,6 +60,7 @@ export default function ChartCard({
   cacheKey,
   height = 180,
   showRelativeChange = true,
+  compact = false,
 }: ChartCardProps) {
   const { theme } = useTheme();
   const [chartData, setChartData] = useState<Array<{ name: string; value: number; relativeValue?: number }> | null>(providedData || null);
@@ -405,7 +407,9 @@ export default function ChartCard({
     if (showRelativeChange && data.length > 0) {
       const baseValue = data[0].value;
       data.forEach(point => {
-        point.relativeValue = ((point.value / baseValue) - 1) * 100;
+        if (point.relativeValue === undefined) {
+          point.relativeValue = ((point.value / baseValue) - 1) * 100;
+        }
       });
     }
     
@@ -414,7 +418,7 @@ export default function ChartCard({
 
   if (loading) {
     return (
-      <Card className="w-full h-full">
+      <Card className={`w-full h-full ${compact ? "overflow-hidden" : ""}`}>
         <CardHeader className="pb-2">
           <div className="flex items-baseline justify-between">
             <CardTitle className="text-md">{title}</CardTitle>
@@ -422,8 +426,8 @@ export default function ChartCard({
           </div>
         </CardHeader>
         <CardContent className="p-0">
-          <div className="h-[180px] w-full flex items-center justify-center">
-            <Skeleton className="h-[150px] w-[95%]" />
+          <div className={`w-full flex items-center justify-center`} style={{ height: `${height}px` }}>
+            <Skeleton className={`h-[${height - 30}px] w-[95%]`} style={{ height: `${height - 30}px` }} />
           </div>
         </CardContent>
       </Card>
@@ -432,7 +436,7 @@ export default function ChartCard({
 
   if (error) {
     return (
-      <Card className="w-full h-full">
+      <Card className={`w-full h-full ${compact ? "overflow-hidden" : ""}`}>
         <CardHeader className="pb-2">
           <div className="flex items-baseline justify-between">
             <CardTitle className="text-md">{title}</CardTitle>
@@ -440,7 +444,7 @@ export default function ChartCard({
           </div>
         </CardHeader>
         <CardContent className="p-0">
-          <div className="h-[180px] w-full flex flex-col items-center justify-center">
+          <div className={`w-full flex flex-col items-center justify-center`} style={{ height: `${height}px` }}>
             <p className="text-muted-foreground">Using simulated market data</p>
             <p className="text-xs text-muted-foreground">(Real-time data unavailable)</p>
           </div>
@@ -490,22 +494,22 @@ export default function ChartCard({
     : undefined;
 
   return (
-    <Card className="w-full h-full">
-      <CardHeader className="pb-1">
+    <Card className={`w-full h-full ${compact ? "overflow-hidden" : ""}`}>
+      <CardHeader className={`${compact ? "pb-1 pt-3 px-3" : "pb-1"}`}>
         <div className="flex items-center justify-between">
           <div>
-            <CardTitle className="text-md">{title}</CardTitle>
-            {subtitle && <span className="text-sm text-muted-foreground">{subtitle}</span>}
+            <CardTitle className={`${compact ? "text-sm" : "text-md"}`}>{title}</CardTitle>
+            {subtitle && <span className={`${compact ? "text-xs" : "text-sm"} text-muted-foreground`}>{subtitle}</span>}
           </div>
           
           {/* Refresh button and cached data indicator */}
           {ticker && (
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1">
               {usingCache && (
                 <TooltipProvider>
                   <UITooltip>
                     <TooltipTrigger>
-                      <Database className="h-4 w-4 text-muted-foreground" />
+                      <Database className={`${compact ? "h-3 w-3" : "h-4 w-4"} text-muted-foreground`} />
                     </TooltipTrigger>
                     <TooltipContent>
                       <p>Using cached data (30m)</p>
@@ -519,12 +523,12 @@ export default function ChartCard({
                 size="icon" 
                 onClick={() => fetchChartData(true)} 
                 disabled={!canRefreshData || loading}
-                className="h-8 w-8"
+                className={`${compact ? "h-6 w-6" : "h-8 w-8"}`}
               >
                 <TooltipProvider>
                   <UITooltip>
                     <TooltipTrigger>
-                      <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+                      <RefreshCw className={`${compact ? "h-3 w-3" : "h-4 w-4"} ${loading ? "animate-spin" : ""}`} />
                     </TooltipTrigger>
                     <TooltipContent>
                       {canRefreshData 
@@ -541,11 +545,11 @@ export default function ChartCard({
         {/* Change percentage and value */}
         {chartData && chartData.length > 0 && (
           <div className="flex items-baseline gap-2 mt-1">
-            <span className={`font-mono text-sm ${isPositive ? "text-success" : "text-danger"}`}>
+            <span className={`font-mono ${compact ? "text-xs" : "text-sm"} ${isPositive ? "text-success" : "text-danger"}`}>
               {isPositive ? "+" : ""}{changePercent.toFixed(2)}%
             </span>
             {!showRelativeChange && (
-              <span className="text-xs text-muted-foreground font-mono">
+              <span className={`${compact ? "text-[10px]" : "text-xs"} text-muted-foreground font-mono`}>
                 {isPositive ? "+" : ""}{changeValue.toFixed(2)}
               </span>
             )}
@@ -570,16 +574,16 @@ export default function ChartCard({
         )}
       </CardHeader>
       
-      <CardContent className="p-1">
-        <div className={`h-[${height}px] w-full`} style={{ height: `${height}px` }}>
+      <CardContent className={`${compact ? "p-0" : "p-1"}`}>
+        <div className="w-full" style={{ height: `${height}px` }}>
           <ResponsiveContainer width="100%" height="100%">
             <LineChart
               data={chartData || []}
               margin={{
-                top: 5,
-                right: 10,
-                left: 5,
-                bottom: 5,
+                top: compact ? 2 : 5,
+                right: compact ? 5 : 10,
+                left: compact ? 2 : 5,
+                bottom: compact ? 2 : 5,
               }}
             >
               <defs>
@@ -595,17 +599,22 @@ export default function ChartCard({
                 dataKey="name"
                 axisLine={false}
                 tickLine={false}
-                tick={{ fontSize: 10, fill: textColor }}
+                tick={{ fontSize: compact ? 8 : 10, fill: textColor }}
                 interval="preserveStartEnd"
-                tickMargin={8}
+                tickMargin={compact ? 5 : 8}
               />
               
               <YAxis
                 axisLine={false}
                 tickLine={false}
-                tick={{ fontSize: 10, fill: textColor }}
+                tick={{ fontSize: compact ? 8 : 10, fill: textColor }}
                 domain={showRelativeChange ? [chartMinValue, chartMaxValue] : ['auto', 'auto']}
-                tickFormatter={(value) => showRelativeChange ? `${value.toFixed(1)}%` : `$${value}`}
+                tickFormatter={(value) => {
+                  if (showRelativeChange) {
+                    return compact ? `${value.toFixed(0)}%` : `${value.toFixed(1)}%`;
+                  }
+                  return compact ? `$${Math.round(value)}` : `$${value}`;
+                }}
               />
               
               <Tooltip 
@@ -613,12 +622,12 @@ export default function ChartCard({
                   backgroundColor: tooltipBgColor,
                   border: `1px solid ${tooltipBorderColor}`,
                   borderRadius: "8px",
-                  fontSize: "12px",
-                  padding: "8px",
+                  fontSize: compact ? "10px" : "12px",
+                  padding: compact ? "4px" : "8px",
                   boxShadow: "0px 4px 12px rgba(0, 0, 0, 0.1)"
                 }}
                 itemStyle={{ color: textColor }}
-                labelStyle={{ color: textColor, marginBottom: "4px" }}
+                labelStyle={{ color: textColor, marginBottom: compact ? "2px" : "4px" }}
                 formatter={(value: any) => {
                   if (showRelativeChange) {
                     return [`${parseFloat(value).toFixed(2)}%`, 'Change'];
@@ -652,9 +661,9 @@ export default function ChartCard({
                 type="monotone"
                 dataKey={yDataKey}
                 stroke={finalChartColor}
-                strokeWidth={2}
+                strokeWidth={compact ? 1.5 : 2}
                 dot={false}
-                activeDot={{ r: 5, stroke: tooltipBgColor, strokeWidth: 2 }}
+                activeDot={{ r: compact ? 3 : 5, stroke: tooltipBgColor, strokeWidth: compact ? 1 : 2 }}
                 isAnimationActive={true}
                 animationDuration={1000}
                 fill={`url(#colorGradient-${title.replace(/\s+/g, '')})`}
