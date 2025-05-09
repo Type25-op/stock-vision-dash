@@ -140,12 +140,14 @@ export default function Dashboard() {
                   <CardContent className="p-6">
                     <div className="h-[400px]">
                       <ChartCard
-                        title="Nifty 50 Day Graph"
+                        title="Nifty 50 Graph"
                         ticker="NIFTY50"
                         color="hsl(var(--primary))"
                         subtitle="May 09, 2025"
                         period="1d"
                         cacheKey="nifty50_chart"
+                        height={380}
+                        showRelativeChange={false}
                       />
                     </div>
                   </CardContent>
@@ -198,6 +200,8 @@ export default function Dashboard() {
               subtitle="Last 5 days"
               period="5d"
               cacheKey="volatility_chart"
+              height={180}
+              showRelativeChange={true}
             />
             
             <ChartCard
@@ -207,6 +211,8 @@ export default function Dashboard() {
               subtitle="Past month"
               period="1mo"
               cacheKey="market_overview_chart"
+              height={180}
+              showRelativeChange={true}
             />
           </div>
         </div>

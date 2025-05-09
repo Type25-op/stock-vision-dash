@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/sonner";
 import { Database, RefreshCw } from "lucide-react";
 import { Tooltip as UITooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { useTheme } from "@/providers/ThemeProvider";
 import { 
   canRefresh, 
   markRefreshed, 
@@ -27,6 +28,8 @@ interface ChartCardProps {
   period?: string;
   onDataLoaded?: (stockData: StockData | null) => void;
   cacheKey?: string;
+  height?: number;
+  showRelativeChange?: boolean;
 }
 
 interface YahooFinanceData {
@@ -42,6 +45,9 @@ interface StockData {
   change: number;
 }
 
+// Available chart periods
+export type ChartPeriod = "1d" | "5d" | "1mo" | "3mo" | "6mo" | "1y";
+
 export default function ChartCard({
   title,
   ticker,
@@ -51,24 +57,32 @@ export default function ChartCard({
   period = "1d",
   onDataLoaded,
   cacheKey,
+  height = 180,
+  showRelativeChange = true,
 }: ChartCardProps) {
-  const [chartData, setChartData] = useState<Array<{ name: string; value: number }> | null>(providedData || null);
+  const { theme } = useTheme();
+  const [chartData, setChartData] = useState<Array<{ name: string; value: number; relativeValue?: number }> | null>(providedData || null);
   const [loading, setLoading] = useState(!providedData && !!ticker);
   const [error, setError] = useState<string | null>(null);
   const [stockInfo, setStockInfo] = useState<StockData | null>(null);
   const [canRefreshData, setCanRefreshData] = useState(true);
   const [cooldownTime, setCooldownTime] = useState<string>("");
   const [usingCache, setUsingCache] = useState(false);
+  const [selectedPeriod, setSelectedPeriod] = useState<ChartPeriod>(period as ChartPeriod);
 
-  // Chart customization options
-  const hasProviderColor = !!color;
-  const chartColor = hasProviderColor ? color : "hsl(var(--primary))";
-  const areaFill = hasProviderColor ? `${color}33` : "hsl(var(--primary) / 0.2)"; // 20% opacity
+  // Chart customization options based on theme
+  const isDarkMode = theme === 'dark';
+  const chartColor = color;
+  const areaFill = `${color}33`; // 20% opacity
+  const textColor = isDarkMode ? "rgba(255, 255, 255, 0.7)" : "rgba(0, 0, 0, 0.7)";
+  const gridColor = isDarkMode ? "rgba(255, 255, 255, 0.1)" : "rgba(0, 0, 0, 0.1)";
+  const tooltipBgColor = isDarkMode ? "#1A1F2C" : "#FFFFFF";
+  const tooltipBorderColor = isDarkMode ? "#333" : "#ccc";
   
-  const fetchChartData = useCallback(async (isRefresh = false) => {
+  const fetchChartData = useCallback(async (isRefresh = false, chartPeriod = selectedPeriod) => {
     if (!ticker) return;
     
-    const dataKey = cacheKey || `chart_${ticker}_${period}`;
+    const dataKey = cacheKey ? `${cacheKey}_${chartPeriod}` : `chart_${ticker}_${chartPeriod}`;
     
     // Check if refresh is allowed
     if (isRefresh && !canRefresh(dataKey)) {
@@ -82,7 +96,7 @@ export default function ChartCard({
     setError(null);
     
     try {
-      console.log(`Generating stock data for ${ticker} with period ${period}`);
+      console.log(`Generating stock data for ${ticker} with period ${chartPeriod}`);
       
       // If this is a refresh action, clear the cache for this key
       if (isRefresh) {
@@ -103,7 +117,16 @@ export default function ChartCard({
         }, 1000);
       }
       
-      const fallbackData = generateRealisticStockData(ticker, period);
+      const fallbackData = generateRealisticStockData(ticker, chartPeriod);
+      
+      // Convert to relative values if needed
+      if (showRelativeChange && fallbackData.length > 0) {
+        const baseValue = fallbackData[0].value;
+        fallbackData.forEach(dataPoint => {
+          dataPoint.relativeValue = ((dataPoint.value / baseValue) - 1) * 100;
+        });
+      }
+      
       setChartData(fallbackData);
       setUsingCache(!isRefresh);
       
@@ -121,7 +144,7 @@ export default function ChartCard({
       // Use simple fallback data
       setChartData(generateSimpleFallbackData());
       // Show toast to inform user
-      toast.error("Unable to load live chart data. Using simulated data instead.");
+      toast.error("Unable to load chart data. Using simulated data instead.");
       
       if (onDataLoaded) {
         onDataLoaded(null);
@@ -129,7 +152,7 @@ export default function ChartCard({
     } finally {
       setLoading(false);
     }
-  }, [ticker, period, providedData, onDataLoaded, cacheKey]);
+  }, [ticker, selectedPeriod, providedData, onDataLoaded, cacheKey, showRelativeChange]);
 
   useEffect(() => {
     if (providedData) {
@@ -137,16 +160,17 @@ export default function ChartCard({
       return;
     }
     
-    fetchChartData();
+    fetchChartData(false, selectedPeriod);
     
     // Setup cooldown timer check
     if (ticker && cacheKey) {
+      const dataKey = `${cacheKey}_${selectedPeriod}`;
       const checkCooldown = () => {
-        const canRefreshNow = canRefresh(cacheKey);
+        const canRefreshNow = canRefresh(dataKey);
         setCanRefreshData(canRefreshNow);
         
         if (!canRefreshNow) {
-          setCooldownTime(formatCooldown(getRemainingCooldown(cacheKey)));
+          setCooldownTime(formatCooldown(getRemainingCooldown(dataKey)));
         }
       };
       
@@ -155,7 +179,13 @@ export default function ChartCard({
       
       return () => clearInterval(interval);
     }
-  }, [ticker, period, providedData, onDataLoaded, fetchChartData, cacheKey]);
+  }, [ticker, selectedPeriod, providedData, onDataLoaded, fetchChartData, cacheKey]);
+  
+  // Handle period change
+  const handlePeriodChange = (newPeriod: ChartPeriod) => {
+    setSelectedPeriod(newPeriod);
+    fetchChartData(false, newPeriod);
+  };
   
   // Generate additional stock data (price, volume, marketCap)
   const generateAdditionalStockData = (ticker: string): StockData => {
@@ -247,6 +277,7 @@ export default function ChartCard({
       period === "1d" ? 24 : // hourly
       period === "5d" ? 40 : // 5 days × 8 hours
       period === "1mo" ? 30 : // daily for a month
+      period === "3mo" ? 90 : // daily for 3 months
       period === "6mo" ? 26 : // weekly for 6 months
       52; // weekly for a year
     
@@ -255,6 +286,7 @@ export default function ChartCard({
       period === "1d" ? 0.003 : 
       period === "5d" ? 0.008 : 
       period === "1mo" ? 0.015 : 
+      period === "3mo" ? 0.025 :
       period === "6mo" ? 0.04 : 
       0.06; // 1y
     
@@ -310,6 +342,11 @@ export default function ChartCard({
         dateFormat = `${day} ${formattedHour}${amPm}`;
       } else if (period === "1mo") {
         // For 1-month chart, use day and month
+        const date = new Date();
+        date.setDate(date.getDate() - (dataPoints - i - 1));
+        dateFormat = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      } else if (period === "3mo") {
+        // For 3-month chart, use day and month
         const date = new Date();
         date.setDate(date.getDate() - (dataPoints - i - 1));
         dateFormat = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
@@ -399,8 +436,17 @@ export default function ChartCard({
     : "hsl(var(--danger))";
   
   // Use provided color or default to dynamic color based on trend
-  const finalChartColor = hasProviderColor ? chartColor : dynamicColor;
-  const finalAreaFill = hasProviderColor ? areaFill : `${dynamicColor}33`;
+  const finalChartColor = color ? chartColor : dynamicColor;
+  const finalAreaFill = areaFill ? areaFill : `${dynamicColor}33`;
+
+  // Get the data key to use
+  const yDataKey = showRelativeChange ? 'relativeValue' : 'value';
+  const chartMaxValue = showRelativeChange 
+    ? Math.max(...chartData.map(item => item.relativeValue || 0)) * 1.1
+    : undefined;
+  const chartMinValue = showRelativeChange 
+    ? Math.min(...chartData.map(item => item.relativeValue || 0)) * 1.1
+    : undefined;
 
   return (
     <Card className="w-full h-full">
@@ -457,22 +503,41 @@ export default function ChartCard({
             <span className={`font-mono text-sm ${isPositive ? "text-success" : "text-danger"}`}>
               {isPositive ? "+" : ""}{changePercent.toFixed(2)}%
             </span>
-            <span className="text-xs text-muted-foreground font-mono">
-              {isPositive ? "+" : ""}{changeValue.toFixed(2)}
-            </span>
+            {!showRelativeChange && (
+              <span className="text-xs text-muted-foreground font-mono">
+                {isPositive ? "+" : ""}{changeValue.toFixed(2)}
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* Time period selector */}
+        {ticker === "NIFTY50" && (
+          <div className="flex flex-wrap gap-1 mt-2">
+            {(["1d", "5d", "1mo", "3mo", "6mo", "1y"] as ChartPeriod[]).map((p) => (
+              <Button
+                key={p}
+                variant={selectedPeriod === p ? "default" : "outline"}
+                size="sm"
+                className="h-6 text-xs px-2"
+                onClick={() => handlePeriodChange(p)}
+              >
+                {p}
+              </Button>
+            ))}
           </div>
         )}
       </CardHeader>
       
       <CardContent className="p-1">
-        <div className="h-[180px] w-full">
+        <div className={`h-[${height}px] w-full`} style={{ height: `${height}px` }}>
           <ResponsiveContainer width="100%" height="100%">
             <LineChart
               data={chartData}
               margin={{
                 top: 5,
                 right: 10,
-                left: 0,
+                left: 5,
                 bottom: 5,
               }}
             >
@@ -483,13 +548,13 @@ export default function ChartCard({
                 </linearGradient>
               </defs>
               
-              <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.2} />
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={gridColor} opacity={0.2} />
               
               <XAxis
                 dataKey="name"
                 axisLine={false}
                 tickLine={false}
-                tick={{ fontSize: 10, fill: "var(--muted-foreground)" }}
+                tick={{ fontSize: 10, fill: textColor }}
                 interval="preserveStartEnd"
                 tickMargin={8}
               />
@@ -497,30 +562,45 @@ export default function ChartCard({
               <YAxis
                 axisLine={false}
                 tickLine={false}
-                tick={{ fontSize: 10, fill: "var(--muted-foreground)" }}
-                domain={['auto', 'auto']}
-                tickFormatter={(value) => `$${value}`}
+                tick={{ fontSize: 10, fill: textColor }}
+                domain={showRelativeChange ? [chartMinValue, chartMaxValue] : ['auto', 'auto']}
+                tickFormatter={(value) => showRelativeChange ? `${value.toFixed(1)}%` : `$${value}`}
               />
               
               <Tooltip 
                 contentStyle={{ 
-                  backgroundColor: "var(--background)",
-                  border: "1px solid var(--border)",
+                  backgroundColor: tooltipBgColor,
+                  border: `1px solid ${tooltipBorderColor}`,
                   borderRadius: "8px",
                   fontSize: "12px",
                   padding: "8px",
-                  boxShadow: "var(--shadow)"
+                  boxShadow: "0px 4px 12px rgba(0, 0, 0, 0.1)"
                 }}
-                itemStyle={{ color: "var(--foreground)" }}
-                labelStyle={{ color: "var(--muted-foreground)", marginBottom: "4px" }}
-                formatter={(value) => [`$${value}`, 'Price']}
+                itemStyle={{ color: textColor }}
+                labelStyle={{ color: textColor, marginBottom: "4px" }}
+                formatter={(value: any) => {
+                  if (showRelativeChange) {
+                    return [`${parseFloat(value).toFixed(2)}%`, 'Change'];
+                  }
+                  return [`$${value}`, 'Price'];
+                }}
                 animationDuration={200}
               />
               
-              {startValue > 0 && (
+              {!showRelativeChange && startValue > 0 && (
                 <ReferenceLine 
                   y={startValue} 
-                  stroke="var(--muted-foreground)" 
+                  stroke={textColor} 
+                  strokeWidth={1} 
+                  strokeDasharray="3 3" 
+                  opacity={0.5}
+                />
+              )}
+              
+              {showRelativeChange && (
+                <ReferenceLine 
+                  y={0} 
+                  stroke={textColor} 
                   strokeWidth={1} 
                   strokeDasharray="3 3" 
                   opacity={0.5}
@@ -529,13 +609,14 @@ export default function ChartCard({
               
               <Line
                 type="monotone"
-                dataKey="value"
+                dataKey={yDataKey}
                 stroke={finalChartColor}
                 strokeWidth={2}
                 dot={false}
-                activeDot={{ r: 5, stroke: "var(--background)", strokeWidth: 2 }}
+                activeDot={{ r: 5, stroke: tooltipBgColor, strokeWidth: 2 }}
                 isAnimationActive={true}
                 animationDuration={1000}
+                fill={`url(#colorGradient-${title.replace(/\s+/g, '')})`}
               />
             </LineChart>
           </ResponsiveContainer>
